@@ -84,7 +84,7 @@ namespace SqlSugar
         {
             get
             {
-                return "CREATE TABLE {0}(\r\n{1} $PrimaryKey )";
+                return "CREATE TABLE IF NOT EXISTS {0}(\r\n{1} $PrimaryKey )";
             }
         }
         protected override string CreateTableColumn

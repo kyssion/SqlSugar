@@ -13,6 +13,7 @@ using System.Collections.ObjectModel;
 using NetTaste;
 using Newtonsoft.Json.Linq;
 using System.Xml.Linq;
+using System.Runtime.CompilerServices;
 
 
 namespace SqlSugar
@@ -597,7 +598,7 @@ namespace SqlSugar
             AddMappingNavProperties(dic, navInfo, entityColumns);
         }
 
-        private static void AddMappingNavProperties(Dictionary<string, Expression> dic, AppendNavInfo navInfo, List<EntityColumnInfo> entityColumns)
+        private  void AddMappingNavProperties(Dictionary<string, Expression> dic, AppendNavInfo navInfo, List<EntityColumnInfo> entityColumns)
         {
             foreach (var item in dic)
             {
@@ -615,6 +616,22 @@ namespace SqlSugar
                             ExpressionList = expressionTree,
                             Name = name
                         };
+                        navInfo.MappingNavProperties.Add(item.Key, mappingNavColumnInfo);
+                    }
+                    else if (ExpressionTool.IsNavMember(this.Context,value)) 
+                    {
+                        var mappingNavColumnInfo = new MappingNavColumnInfo()
+                        {
+                            ExpressionList = expressionTree,
+                            Name = name
+                        };
+                        if (value is MemberExpression exp) 
+                        {
+                            if (exp.Expression is MemberExpression expChild) 
+                            { 
+                                mappingNavColumnInfo.ParentName = expChild.Member.Name;
+                            }
+                        }
                         navInfo.MappingNavProperties.Add(item.Key, mappingNavColumnInfo);
                     }
                 }
@@ -746,8 +763,21 @@ namespace SqlSugar
                 {
                     var rightName = item.Value.Name;
                     var rightColumnInfo = columnInfos.FirstOrDefault(a => a.PropertyName == rightName);
+                    var anyParent = item.Value.ParentName.HasValue();
+                    if (anyParent) 
+                    {
+                        rightColumnInfo = columnInfos.FirstOrDefault(a => a.PropertyName == item.Value.ParentName); 
+                    }
                     var rightValue=rightColumnInfo.PropertyInfo.GetValue(rightObject);
                     var leftName = item.Key;
+                    if (anyParent) 
+                    {
+                        if (rightValue == null) 
+                        {
+                            rightValue = UtilMethods.GetDefaultValue(rightColumnInfo.PropertyInfo.PropertyType);
+                        }
+                        rightValue = rightValue.GetType().GetProperty(item.Value.Name).GetValue(rightValue);
+                    }
                     ////  var rightColumn=col
                     //  object value = item;
                     if (item.Value.ExpressionList.Count > 1 && rightValue != null)
@@ -1884,7 +1914,7 @@ namespace SqlSugar
             {
                 result = this.Context.Utilities.DataReaderToSelectArrayList<TResult>(dataReader);
             }
-            else if (entityType.IsAnonymousType() || isComplexModel|| StaticConfig.EnableAot)
+            else if (QueryBuilder.IsParameterizedConstructor || entityType.IsAnonymousType() || isComplexModel|| StaticConfig.EnableAot)
             {
                 if (entityType.IsClass() == false && StaticConfig.EnableAot)
                 {
@@ -2073,6 +2103,7 @@ namespace SqlSugar
             asyncQueryableBuilder.RemoveFilters = this.QueryBuilder.RemoveFilters?.ToArray();
             asyncQueryableBuilder.Hints = this.QueryBuilder.Hints;
             asyncQueryableBuilder.MasterDbTableName = this.QueryBuilder.MasterDbTableName;
+            asyncQueryableBuilder.IsParameterizedConstructor = this.QueryBuilder.IsParameterizedConstructor;
             if (this.QueryBuilder.AppendNavInfo != null)
             {
                 asyncQueryableBuilder.AppendNavInfo = new AppendNavInfo() 

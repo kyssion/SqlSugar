@@ -251,7 +251,10 @@ namespace SqlSugar
         }
         public IDeleteable<T> WhereIF(bool isWhere, Expression<Func<T, bool>> expression)
         {
-            Check.ExceptionEasy(!StaticConfig.EnableAllWhereIF, "Need to program startup configuration StaticConfig. EnableAllWhereIF = true; Tip: This operation is very risky if there are no conditions it is easy to update the entire table", " 需要程序启动时配置StaticConfig.EnableAllWhereIF=true; 提示：该操作存在很大的风险如果没有条件很容易将整个表全部更新");
+            if (DeleteBuilder.WhereInfos.Any() != true)
+            {
+                Check.ExceptionEasy(!StaticConfig.EnableAllWhereIF, "Need to program startup configuration StaticConfig. EnableAllWhereIF = true; Tip: This operation is very risky if there are no conditions it is easy to update the entire table", " 需要程序启动时配置StaticConfig.EnableAllWhereIF=true; 提示：该操作存在很大的风险如果没有条件很容易将整个表全部更新");
+            }
             if (isWhere)
             {
                 return Where(expression);
@@ -401,7 +404,7 @@ namespace SqlSugar
                     {
                         FieldName =item,
                         ConditionalType = ConditionalType.Equal,
-                        FieldValue = model[item].ObjToString(),
+                        FieldValue = model[item].ObjToStringNoTrim(),
                         CSharpTypeName = model[item]==null?null : model[item].GetType().Name
                     }));
                     i++;
@@ -705,6 +708,7 @@ namespace SqlSugar
             if (this.RemoveCacheFunc != null) {
                 this.RemoveCacheFunc();
             }
+            DataChangesAop(this.DeleteObjects);
         }
 
         private void Before(string sql)
@@ -764,6 +768,26 @@ namespace SqlSugar
                     EntityColumnInfo=this.EntityInfo.Columns.FirstOrDefault() 
                 };
                 dataEvent(deleteObj,model);
+            }
+        }
+        private void DataChangesAop(List<T> deleteObjs)
+        {
+            var dataEvent = this.Context.CurrentConnectionConfig.AopEvents?.DataChangesExecuted;
+            if(dataEvent != null&&deleteObjs != null)
+            {
+                foreach (var deleteObj in deleteObjs)
+                {
+                    if (deleteObj != null)
+                    {
+                        var model = new DataFilterModel()
+                        {
+                            OperationType = DataFilterType.DeleteByObject,
+                            EntityValue = deleteObj,
+                            EntityColumnInfo = this.EntityInfo.Columns.FirstOrDefault()
+                        };
+                        dataEvent(deleteObj, model);
+                    }
+                }
             }
         }
     }

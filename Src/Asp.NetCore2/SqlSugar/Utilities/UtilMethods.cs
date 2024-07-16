@@ -18,6 +18,46 @@ namespace SqlSugar
 {
     public class UtilMethods
     {
+
+        public static List<SugarParameter> CopySugarParameters(List<SugarParameter> pars)
+        {
+            if(pars==null) return null;
+            var newParameters = pars.Select(it => new SugarParameter(it.ParameterName, it.Value)
+            {
+                TypeName = it.TypeName,
+                Value = it.Value,
+                IsRefCursor = it.IsRefCursor,
+                IsArray = it.IsArray,
+                IsJson = it.IsJson,
+                ParameterName = it.ParameterName,
+                IsNvarchar2 = it.IsNvarchar2,
+                IsNClob = it.IsClob,
+                IsClob = it.IsClob,
+                UdtTypeName = it.UdtTypeName,
+                CustomDbType = it.CustomDbType,
+                DbType = it.DbType,
+                Direction = it.Direction,
+                Precision = it.Precision,
+                Size = it.Size,
+                Scale = it.Scale,
+                IsNullable = it.IsNullable,
+                SourceColumn = it.SourceColumn,
+                SourceColumnNullMapping = it.SourceColumnNullMapping,
+                SourceVersion = it.SourceVersion,
+                TempDate = it.TempDate,
+                _Size = it._Size
+            });
+            return newParameters.ToList();
+        }
+        public static bool IsTuple(Type tType, List<PropertyInfo> classProperties)
+        {
+            if (classProperties?.Any() != true) 
+            {
+                return false;
+            }
+            return tType.FullName?.StartsWith("System.Tuple`") == true && classProperties.FirstOrDefault()?.Name == "Item1";
+        }
+
         internal static string GetTableByDbLink(SqlSugarProvider context,string tableName, string oldTableName, TenantAttribute attr)
         {
             QueryBuilder queryBuilder=InstanceFactory.GetQueryBuilderWithContext(context);
@@ -647,6 +687,7 @@ namespace SqlSugar
                     DbMinDate=it.MoreSettings.DbMinDate,
                     IsNoReadXmlDescription=it.MoreSettings.IsNoReadXmlDescription,
                     SqlServerCodeFirstNvarchar=it.MoreSettings.SqlServerCodeFirstNvarchar,
+                    OracleCodeFirstNvarchar2=it.MoreSettings.OracleCodeFirstNvarchar2,
                     IsAutoToUpper=it.MoreSettings.IsAutoToUpper,
                     IsAutoDeleteQueryFilter=it.MoreSettings.IsAutoDeleteQueryFilter,
                     IsAutoUpdateQueryFilter = it.MoreSettings.IsAutoUpdateQueryFilter,
@@ -660,7 +701,8 @@ namespace SqlSugar
                     SqliteCodeFirstEnableDropColumn=it.MoreSettings.SqliteCodeFirstEnableDropColumn,
                     MaxParameterNameLength=it.MoreSettings.MaxParameterNameLength,
                     DisableQueryWhereColumnRemoveTrim=it.MoreSettings.DisableQueryWhereColumnRemoveTrim,
-                    DatabaseModel=it.MoreSettings.DatabaseModel
+                    DatabaseModel=it.MoreSettings.DatabaseModel,
+                    EnableILike=it.MoreSettings.EnableILike
 
                 },
                 SqlMiddle = it.SqlMiddle == null ? null : new SqlMiddle
@@ -1318,6 +1360,11 @@ namespace SqlSugar
             }
             else if (item.CSharpTypeName.EqualCase(UtilConstants.DateTimeOffsetType.Name))
             {
+                DateTimeOffset dt;
+                if (DateTimeOffset.TryParse(item.FieldValue,out dt)) 
+                {
+                    return dt;
+                }
                 return UtilMethods.GetDateTimeOffsetByDateTime(Convert.ToDateTime(item.FieldValue));
             }
             else if (item.CSharpTypeName.EqualCase(UtilConstants.GuidType.Name))
@@ -1634,8 +1681,12 @@ namespace SqlSugar
         }
         public static string FieldNameSql()
         {
+            if (StaticConfig.TableQuerySqlKey!=null&& StaticConfig.TableQuerySqlKey!=Guid.Empty) 
+            {
+               return  $"[value=sql{StaticConfig.TableQuerySqlKey}]";
+            }
             return $"[value=sql{UtilConstants.ReplaceKey}]";
-        }
+        } 
 
         internal static object TimeOnlyToTimeSpan(object value)
         {
@@ -1684,5 +1735,29 @@ namespace SqlSugar
             return string.Join(" AND ", wheres);
         }
 
+        internal static bool NoErrorParameter(string parameterName)
+        {
+            if (parameterName==null)
+            {
+                return false;
+            }
+            if (parameterName.Contains(" ")) 
+            {
+                return false;
+            }
+            if (parameterName.Contains("("))
+            {
+                return false;
+            }
+            if (parameterName.Contains("（"))
+            {
+                return false;
+            }
+            if (parameterName.Contains("."))
+            {
+                return false;
+            }
+            return true;
+        }
     }
 }

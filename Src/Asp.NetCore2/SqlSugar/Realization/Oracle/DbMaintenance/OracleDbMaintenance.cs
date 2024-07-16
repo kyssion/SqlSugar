@@ -461,7 +461,7 @@ WHERE table_name = '"+tableName+"'");
         {
             List<DbColumnInfo> columns = GetOracleDbType(tableName);
             string sql = "select *  /* " + Guid.NewGuid() + " */ from " +SqlBuilder.GetTranslationTableName(SqlBuilder.GetNoTranslationColumnName(tableName)) + " WHERE 1=2 ";
-            if (!IsAnyTable(tableName, false))
+            if (!IsAnyTable(tableName, false)&&!GetViewInfoList(false).Any(it=>it.Name.EqualCase(tableName)))
             {
                 return new List<DbColumnInfo>();
             }
@@ -616,6 +616,13 @@ WHERE table_name = '"+tableName+"'");
                     if (item.IsIdentity && this.Context.CurrentConnectionConfig?.MoreSettings?.EnableOracleIdentity == true) 
                     {
                         item.DataType = "NUMBER GENERATED ALWAYS AS IDENTITY";
+                    }
+                    if (item.DataType != null && this.Context.CurrentConnectionConfig?.MoreSettings?.OracleCodeFirstNvarchar2 == true)
+                    {
+                        if (!item.DataType.ToLower().Contains("nvarchar2"))
+                        {
+                            item.DataType = item.DataType.ToLower().Replace("varchar", "nvarchar2");
+                        }
                     }
                 }
             }

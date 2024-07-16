@@ -289,7 +289,7 @@ namespace SqlSugar
             classText = classText.Replace(DbFirstTemplate.KeyClassName, className);
             classText = classText.Replace(DbFirstTemplate.KeyNamespace, this.Namespace);
             classText = classText.Replace(DbFirstTemplate.KeyUsing, IsAttribute ? (this.UsingTemplate + "using " + UtilConstants.AssemblyName + ";\r\n") : this.UsingTemplate);
-            classText = classText.Replace(DbFirstTemplate.KeyClassDescription, this.ClassDescriptionTemplate.Replace(DbFirstTemplate.KeyClassDescription, tableInfo.Description + "\r\n"));
+            classText = classText.Replace(DbFirstTemplate.KeyClassDescription, this.ClassDescriptionTemplate.Replace(DbFirstTemplate.KeyClassDescription, tableInfo.Description?.Replace(Environment.NewLine,"\t") + "\r\n"));
             classText = classText.Replace(DbFirstTemplate.KeySugarTable, IsAttribute ? string.Format(DbFirstTemplate.ValueSugarTable, tableInfo.Name) : null);
             if (columns.HasValue())
             {
@@ -329,7 +329,7 @@ namespace SqlSugar
                     }
                     PropertyText = PropertyDescriptionText + PropertyText;
                     classText = classText.Replace(DbFirstTemplate.KeyPropertyName, PropertyText + (isLast ? "" : ("\r\n" + DbFirstTemplate.KeyPropertyName)));
-                    if (ConstructorText.HasValue() && item.DefaultValue != null)
+                    if (ConstructorText.HasValue() && item.DefaultValue != null&&item.IsIdentity!=true)
                     {
                         var hasDefaultValue = columns.Skip(index + 1).Any(it => it.DefaultValue.HasValue());
                         if (item.DefaultValue.EqualCase("CURRENT_TIMESTAMP"))
@@ -345,7 +345,7 @@ namespace SqlSugar
                     }
                 }
             }
-            if (!columns.Any(it => it.DefaultValue != null))
+            if (!columns.Any(it => it.DefaultValue != null&&it.IsIdentity==false))
             {
                 ConstructorText = null;
             }
@@ -470,6 +470,10 @@ namespace SqlSugar
             PropertyText = PropertyText.Replace(DbFirstTemplate.KeySugarColumn, SugarColumnText);
             PropertyText = PropertyText.Replace(DbFirstTemplate.KeyPropertyType, typeString);
             PropertyText = PropertyText.Replace(DbFirstTemplate.KeyPropertyName, propertyName);
+            if (typeString == "string"&&this.IsStringNullable&&item.IsNullable==false&&PropertyText.EndsWith("{get;set;}\r\n")) 
+            {
+                PropertyText=PropertyText.Replace("{get;set;}\r\n", "{get;set;} = null!;\r\n");
+            }
             return PropertyText;
         }
         private string GetEnityName(DbColumnInfo item)
@@ -566,6 +570,10 @@ namespace SqlSugar
                 return "null";
             }
             string result = this.Context.Ado.DbBind.GetConvertString(item.DataType) + "(\"" + convertString + "\")";
+            if (this.SqlBuilder.SqlParameterKeyWord == ":"&&!string.IsNullOrEmpty(item.OracleDataType)) 
+            {
+                result = this.Context.Ado.DbBind.GetConvertString(item.OracleDataType) + "(\"" + convertString + "\")";
+            }
             return result;
         }
         private string GetPropertyDescriptionText(DbColumnInfo item, string propertyDescriptionText)
@@ -580,6 +588,7 @@ namespace SqlSugar
             if (columnDescription == null) return columnDescription;
             columnDescription = columnDescription.Replace("\r", "\t");
             columnDescription = columnDescription.Replace("\n", "\t");
+            columnDescription = columnDescription.Replace(Environment.NewLine, "\t");
             columnDescription = Regex.Replace(columnDescription, "\t{2,}", "\t");
             return columnDescription;
         }

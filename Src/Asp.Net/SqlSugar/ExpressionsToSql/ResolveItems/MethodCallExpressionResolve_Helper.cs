@@ -649,6 +649,7 @@ namespace SqlSugar
             }
             else
             {
+                var iLike = this.Context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.EnableILike == true;
                 if (name == "Parse" && TempParseType.IsIn(UtilConstants.GuidType) && model.Args != null && model.Args.Count() > 1)
                 {
                     name = "Equals";
@@ -679,7 +680,7 @@ namespace SqlSugar
                     case "Trim":
                         return this.Context.DbMehtods.Trim(model);
                     case "Contains":
-                        return this.Context.DbMehtods.Contains(model);
+                        return GetLike(this.Context.DbMehtods.Contains(model),iLike);
                     case "ContainsArray":
                         if (model.Args[0].MemberValue == null)
                         {
@@ -748,6 +749,7 @@ namespace SqlSugar
                             return dsResult;
                         }
                     case "DateAdd":
+                        model.Conext = this.Context;
                         if (model.Args.Count == 2)
                             return this.Context.DbMehtods.DateAddDay(model);
                         else
@@ -763,9 +765,9 @@ namespace SqlSugar
                     case "Between":
                         return this.Context.DbMehtods.Between(model);
                     case "StartsWith":
-                        return this.Context.DbMehtods.StartsWith(model);
+                        return GetLike(this.Context.DbMehtods.StartsWith(model),iLike);
                     case "EndsWith":
-                        return this.Context.DbMehtods.EndsWith(model);
+                        return GetLike(this.Context.DbMehtods.EndsWith(model), iLike);
                     case "ToInt32":
                         return this.Context.DbMehtods.ToInt32(model);
                     case "ToInt64":
@@ -807,6 +809,7 @@ namespace SqlSugar
                                   MemberValue= "100000",
                             });
                         }
+                        model.Conext = this.Context;
                         return this.Context.DbMehtods.Substring(model);
                     case "Replace":
                         return this.Context.DbMehtods.Replace(model);
@@ -974,7 +977,7 @@ namespace SqlSugar
                     case "Modulo":
                         return this.Context.DbMehtods.Modulo(model);
                     case "Like":
-                        return this.Context.DbMehtods.Like(model);
+                         return GetLike(this.Context.DbMehtods.Like(model),iLike);
                     case "ToSingle":
                         return this.Context.DbMehtods.ToSingle(model);
                     case "GreaterThan_LinqDynamicCore":
@@ -991,6 +994,16 @@ namespace SqlSugar
             }
             return null;
         }
+
+        private string GetLike(string result, bool iLike)
+        {
+            if (iLike) 
+            {
+                result = result.Replace(" like ", " ilike ");
+            }
+            return result;
+        }
+
         private DbType GetType(string name)
         {
             DbType result = DbType.SqlServer;

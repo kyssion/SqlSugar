@@ -39,6 +39,10 @@ namespace SqlSugar
                 lsColNames.Add($"\"{dt.Columns[i].ColumnName}\"");
             }
             string copyString = $"COPY  {dt.TableName} ( {string.Join(",", lsColNames) } ) FROM STDIN (FORMAT BINARY)";
+            if (this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.OpenGauss)
+            {
+                copyString = copyString.Replace("(FORMAT BINARY)", "(FORMAT 'BINARY')");
+            }
             NpgsqlConnection conn = (NpgsqlConnection)this.Context.Ado.Connection;
             var columns = this.Context.DbMaintenance.GetColumnInfosByTableName(this.entityInfo.DbTableName);
             try
@@ -119,10 +123,10 @@ namespace SqlSugar
                         {
                             value = DBNull.Value;
                         }
-                        else if (value is double) 
-                        {
-                            column.Type = NpgsqlDbType.Double;
-                        }
+                        //else if (value is double&&this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel==null) 
+                        //{
+                        //    column.Type = NpgsqlDbType.Double;
+                        //}
                         if (column.Type == null)
                         {
                             writer.Write(value);

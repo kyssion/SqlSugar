@@ -237,6 +237,8 @@ namespace SqlSugar
                 Check.Exception(whereColumns == null || whereColumns.Count() == 0, "where columns count=0 or need primary key");
                 var isAuto = this.context.CurrentConnectionConfig.IsAutoCloseConnection;
                 this.context.CurrentConnectionConfig.IsAutoCloseConnection = false;
+                var old = this.context.Ado.IsDisableMasterSlaveSeparation;
+                this.context.Ado.IsDisableMasterSlaveSeparation = true;
                 DataTable dt = ToDdateTable(datas);
                 IFastBuilder buider = GetBuider();
                 buider.Context = context;
@@ -255,6 +257,7 @@ namespace SqlSugar
                 this.context.CurrentConnectionConfig.IsAutoCloseConnection = isAuto;
                 buider.CloseDb();
                 End(datas, false, true);
+                this.context.Ado.IsDisableMasterSlaveSeparation = old;
                 return result;
             }
             catch (Exception)
@@ -277,10 +280,11 @@ namespace SqlSugar
             foreach (DataColumn item in dataTable.Columns)
             {
                 var isPrimaryKey = whereColumns.Any(it => it.EqualCase(item.ColumnName));
-                builder.CreateProperty(item.ColumnName, item.DataType, new SugarColumn()
+                builder.CreateProperty(item.ColumnName,typeof(Nullable<>).MakeGenericType(item.DataType), new SugarColumn()
                 {
                     IsPrimaryKey = isPrimaryKey,
-                    IsIdentity=isIdentity&& isPrimaryKey
+                    IsIdentity=isIdentity&& isPrimaryKey,
+                    IsNullable= true,
 
                 });
             }
@@ -304,6 +308,8 @@ namespace SqlSugar
                 Check.Exception(updateColumns == null || updateColumns.Count() == 0, "set columns count=0");
                 var isAuto = this.context.CurrentConnectionConfig.IsAutoCloseConnection;
                 this.context.CurrentConnectionConfig.IsAutoCloseConnection = false;
+                var old = this.context.Ado.IsDisableMasterSlaveSeparation;
+                this.context.Ado.IsDisableMasterSlaveSeparation = true;
                 DataTable dt = ToDdateTable(datas);
                 IFastBuilder buider = GetBuider();
                 ActionIgnoreColums(whereColumns, updateColumns, dt, buider.IsActionUpdateColumns);
@@ -317,7 +323,8 @@ namespace SqlSugar
                     this.context.DbMaintenance.DropTable(dt.TableName);
                 }
                 this.context.CurrentConnectionConfig.IsAutoCloseConnection = isAuto;
-                buider.CloseDb();
+                buider.CloseDb(); 
+                this.context.Ado.IsDisableMasterSlaveSeparation = old;
                 End(datas, false);
                 return result;
             }
@@ -371,6 +378,8 @@ namespace SqlSugar
             Check.Exception(updateColumns == null || updateColumns.Count() == 0, "set columns count=0");
             var isAuto = this.context.CurrentConnectionConfig.IsAutoCloseConnection;
             this.context.CurrentConnectionConfig.IsAutoCloseConnection = false;
+            var old = this.context.Ado.IsDisableMasterSlaveSeparation;
+            this.context.Ado.IsDisableMasterSlaveSeparation = true;
             dataTable.TableName = this.queryable.SqlBuilder.GetTranslationTableName(tableName);
             DataTable dt = GetCopyWriteDataTableUpdate(dataTable);
             IFastBuilder buider = GetBuider();
@@ -394,7 +403,8 @@ namespace SqlSugar
             }
             this.context.CurrentConnectionConfig.IsAutoCloseConnection = isAuto;
             buider.CloseDb();
-            End(datas, false);
+            this.context.Ado.IsDisableMasterSlaveSeparation = old;
+         End(datas, false);
             return result;
         }
         private async Task<int> _BulkCopy(List<T> datas)

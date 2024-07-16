@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using System.Data.Odbc;
 using System.Text.RegularExpressions;
+using System.Data.SqlTypes;
 namespace SqlSugar.OceanBaseForOracle
 {
     public class OceanBaseForOracleProvider : AdoProvider
@@ -67,14 +68,14 @@ namespace SqlSugar.OceanBaseForOracle
         {
             if (this.Context.Ado.Transaction != null)
             {
-                return await GetScalarAsync(sql, parameters);
+                return await _GetScalarAsync(sql, parameters);
             }
             else
             {
                 try
                 {
                     this.Context.Ado.BeginTran();
-                    var result = await GetScalarAsync(sql, parameters);
+                    var result = await _GetScalarAsync(sql, parameters);
                     this.Context.Ado.CommitTran();
                     return result;
                 }
@@ -209,28 +210,17 @@ namespace SqlSugar.OceanBaseForOracle
                         p.ParameterName = this.SqlParameterKeyWord + p.ParameterName;
                     }
                 }
-                //由于Odbc参数都为?，用顺序进行匹配，则进行参数排序
-                string reg = string.Join('|', parameters.Select(m => m.ParameterName));
-                //通过正则匹配，为顺序输出，相同也会重复匹配
-                Regex parametersRegx = new Regex(reg);
-                MatchCollection matches = parametersRegx.Matches(sql);
-                foreach (Match pMatch in matches)
-                {
-                    SugarParameter mP = parameters.FirstOrDefault(m => m.ParameterName == pMatch.Value);
-                    if (mP != null)
-                    {
-                        orderParameters.Add(mP);
-                    }
-                }
-                if (orderParameters.Select(it => it.ParameterName).GroupBy(it => it).Where(it => it.Count() > 1).Any())
-                {
-                    orderParameters= parameters.Where(it=>sql.Contains(it.ParameterName))
-                                               .OrderBy(it => sql.IndexOf(it.ParameterName)).ToList();
-                }
+                orderParameters = parameters.Where(it => sql.Contains(it.ParameterName))
+                                           .Select(it =>new { p=it,sort= GetSortId(sql, it) })
+                                           .OrderBy(it=>it.sort)
+                                           .Where(it=>it.sort!=0)
+                                           .Select(it=>it.p)
+                                           .ToList();
                 foreach (var param in parameters.OrderByDescending(it => it.ParameterName.Length))
                 {
                     sql = sql.Replace(param.ParameterName, "?");
                 }
+
             }
             OdbcCommand sqlCommand = new OdbcCommand(sql, (OdbcConnection)this.Connection);
             sqlCommand.CommandType = this.CommandType;
@@ -247,6 +237,26 @@ namespace SqlSugar.OceanBaseForOracle
             CheckConnection();
             return sqlCommand;
         }
+
+        private static int GetSortId(string sql, SugarParameter it)
+        {
+            return new List<int>() {                
+                                                  0,
+                                                  sql.IndexOf(it.ParameterName+")"),
+                                                  sql.IndexOf(it.ParameterName+" "),
+                                                  sql.IndexOf(it.ParameterName+"="),
+                                                  sql.IndexOf(it.ParameterName+"+"),
+                                                  sql.IndexOf(it.ParameterName+"-"),
+                                                  sql.IndexOf(it.ParameterName+";"),
+                                                  sql.IndexOf(it.ParameterName+","),
+                                                  sql.IndexOf(it.ParameterName+"*"),
+                                                  sql.IndexOf(it.ParameterName+"/"),
+                                                  sql.IndexOf(it.ParameterName+"|"),
+                                                  sql.IndexOf(it.ParameterName+"&"),
+                                                  sql.EndsWith(it.ParameterName)?sql.IndexOf(it.ParameterName):0
+                                           }.Max();
+        }
+
         public override void SetCommandToAdapter(IDataAdapter dataAdapter, DbCommand command)
         {
             ((OceanBaseForOracleDataAdapter)dataAdapter).SelectCommand = (OdbcCommand)command;

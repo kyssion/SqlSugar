@@ -165,15 +165,24 @@ namespace SqlSugar
 
             if (navObjectNameColumnInfo.Navigat.NavigatType == NavigateType.OneToOne)
             {
-                OneToOne(list, selector, listItemEntity, navObjectNamePropety, navObjectNameColumnInfo);
+                this.Context.Utilities.PageEach(list, 5000, pageList =>
+                {
+                    OneToOne(pageList, selector, listItemEntity, navObjectNamePropety, navObjectNameColumnInfo);
+                });
             }
             else if (navObjectNameColumnInfo.Navigat.NavigatType == NavigateType.OneToMany)
             {
-                OneToMany(list, selector, listItemEntity, navObjectNamePropety, navObjectNameColumnInfo);
+                this.Context.Utilities.PageEach(list, 5000, pageList =>
+                {
+                    OneToMany(pageList, selector, listItemEntity, navObjectNamePropety, navObjectNameColumnInfo);
+                });
             }
             else if (navObjectNameColumnInfo.Navigat.NavigatType == NavigateType.ManyToOne)
             {
-                OneToOne(list, selector, listItemEntity, navObjectNamePropety, navObjectNameColumnInfo);
+                this.Context.Utilities.PageEach(list, 5000, pageList =>
+                {
+                    OneToOne(pageList, selector, listItemEntity, navObjectNamePropety, navObjectNameColumnInfo);
+                });
             }
             else if (navObjectNameColumnInfo.Navigat.NavigatType == NavigateType.Dynamic)
             {
@@ -253,11 +262,19 @@ namespace SqlSugar
                 CSharpTypeName = bColumn.PropertyInfo.PropertyType.Name
             }));
             var sql = GetWhereSql(GetCrossDatabase(abDb, bEntity));
-            if (sql.SelectString == null) 
+            if (sql.SelectString == null)
             {
                 var columns = bEntityInfo.Columns.Where(it => !it.IsIgnore)
-                     .Select(it => GetOneToManySelectByColumnInfo(it,abDb)).ToList();
+                     .Select(it => GetOneToManySelectByColumnInfo(it, abDb)).ToList();
                 sql.SelectString = String.Join(",", columns);
+            }
+            else 
+            {
+               var bid=InstanceFactory.GetQueryBuilderWithContext(abDb).Builder.GetTranslationColumnName(bPkColumn.DbColumnName);
+                if (!sql.SelectString.ToLower().Contains(bid?.ToLower())&&!sql.SelectString.Contains("*")) 
+                {
+                    sql.SelectString += ("," + bid+" AS " +bid);
+                }
             }
             var bList = selector(bDb.Queryable<object>().AS(bEntityInfo.DbTableName).ClearFilter(QueryBuilder.RemoveFilters).Filter(this.QueryBuilder?.IsDisabledGobalFilter == true ? null : bEntityInfo.Type).AddParameters(sql.Parameters).Where(conditionalModels2).WhereIF(sql.WhereString.HasValue(),sql.WhereString).Select(sql.SelectString).OrderByIF(sql.OrderByString.HasValue(),sql.OrderByString));  
             if (bList.HasValue())
@@ -363,6 +380,10 @@ namespace SqlSugar
             if (navPkColumn?.UnderType?.Name == UtilConstants.StringType.Name)
             {
                 ids = ids.Select(it => it?.ToString()?.Replace(",", "[comma]")).Cast<object>().ToList();
+            }
+            if (navPkColumn?.UnderType?.Name == UtilConstants.DateType.Name)
+            {
+                ids = ids.Select(it =>it==null?null:it.ObjToDate().ToString("yyyy-MM-dd HH:mm:ss.fff") ).Cast<object>().ToList();
             }
             conditionalModels.Add((new ConditionalModel()
             {

@@ -88,6 +88,7 @@ namespace SqlSugar
         {
             ((OracleConnection)this.Connection).BeginTransaction();
         }
+         
         /// <summary>
         /// Only SqlServer
         /// </summary>
@@ -97,6 +98,24 @@ namespace SqlSugar
         {
             ((OracleConnection)this.Connection).BeginTransaction(iso);
         }
+
+        public override Func<string, SugarParameter[], KeyValuePair<string, SugarParameter[]>> ProcessingEventStartingSQL => (sql, parameter) => {
+
+            if (sql == "-- No table ")
+            {
+                sql = " SELECT  'No table' FROM DUAL WHERE 1=2 ";
+            }
+            if (base.ProcessingEventStartingSQL != null)
+            {
+                return base.ProcessingEventStartingSQL(sql, parameter);
+            }
+            else 
+            {
+                return new KeyValuePair<string, SugarParameter[]>(sql, parameter);
+            }
+        };
+
+
         public override IDataAdapter GetAdapter()
         {
             return new MyOracleDataAdapter();
@@ -104,7 +123,7 @@ namespace SqlSugar
         public override DbCommand GetCommand(string sql, SugarParameter[] parameters)
         {
             sql = ReplaceKeyWordParameterName(sql, parameters);
-            if (sql?.EndsWith(";")==true&& sql?.TrimStart()?.StartsWith("begin")!=true) 
+            if (sql?.EndsWith(";")==true&& sql?.TrimStart()?.ToLower().StartsWith("begin")!=true && sql?.TrimStart()?.ToLower().Contains("begin") != true) 
             {
                 sql=sql.TrimEnd(';');
             }

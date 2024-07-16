@@ -123,7 +123,23 @@ static void ServerTest()
     sqlugar.Insertable(new Unitadfafa() { Id =1 }).ExecuteCommand();
     var list2=sqlugar.Queryable<Unitadfafa>().ToList();
 
+    sqlugar.CodeFirst.InitTables<UnitDatezaaaa>();
+    
+    var xx = sqlugar.Fastest<UnitDatezaaaa>().BulkCopy(new List<UnitDatezaaaa>() { (new UnitDatezaaaa()
+    {
+       
+    } )});
+    var xx2 = sqlugar.Fastest<UnitDatezaaaa>().BulkCopy(new List<UnitDatezaaaa>() { (new UnitDatezaaaa()
+    { 
+        timeOnly=TimeOnly.FromDateTime(DateTime.Now),
+        dateOnly=DateOnly.FromDateTime(DateTime.Now)
+    } )});
+    var dates=new List<DateOnly>() { DateOnly.FromDateTime(DateTime.Now) };
+    var list2111 = sqlugar.Queryable<UnitDatezaaaa>()
+    .Where(it => dates.Contains(it.dateOnly.Value))
+    .ToList();
 }
+
 
 
 static void SqliteTest()
@@ -186,6 +202,13 @@ public class UnitDatez211afa
 {
     public TimeOnly timeOnly { get; set; }
     public DateOnly dateOnly { get; set; }
+}
+public class UnitDatezaaaa
+{
+    [SugarColumn(IsNullable =true)]
+    public TimeOnly? timeOnly { get; set; }
+    [SugarColumn(IsNullable = true)]
+    public DateOnly? dateOnly { get; set; }
 }
 public class UnitDatez211afa2222
 {

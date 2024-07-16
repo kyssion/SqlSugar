@@ -292,6 +292,39 @@ namespace SqlSugar
             }
         }
 
+        private void DataChangesAop(T [] items)
+        {
+            var dataEvent = this.Context.CurrentConnectionConfig.AopEvents?.DataChangesExecuted;
+            if (dataEvent != null)
+            {
+                foreach (var item in items)
+                {
+                    if (item != null)
+                    {
+                        foreach (var columnInfo in this.EntityInfo.Columns)
+                        {
+                            if (columnInfo.ForOwnsOnePropertyInfo != null)
+                            {
+                                var data = columnInfo.ForOwnsOnePropertyInfo.GetValue(item, null);
+                                if (data != null)
+                                {
+                                    dataEvent(columnInfo.PropertyInfo.GetValue(data, null), new DataFilterModel() { OperationType = DataFilterType.UpdateByObject, EntityValue = item, EntityColumnInfo = columnInfo });
+                                }
+                            }
+                            else if (columnInfo.PropertyInfo.Name == "Item" && columnInfo.IsIgnore)
+                            {
+                                //class index
+                            }
+                            else
+                            {
+                                dataEvent(columnInfo.PropertyInfo.GetValue(item, null), new DataFilterModel() { OperationType = DataFilterType.UpdateByObject, EntityValue = item, EntityColumnInfo = columnInfo });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         private void CheckTranscodeing(bool checkIsJson = true)
         {
             if (this.EntityInfo.Columns.Any(it => it.IsTranscoding))
@@ -670,6 +703,8 @@ namespace SqlSugar
             {
                 this.RemoveCacheFunc();
             }
+
+            DataChangesAop(this.UpdateObjs);
         }
         private string _ExecuteCommandWithOptLock(T updateData,ref object oldVerValue)
         {
@@ -722,6 +757,40 @@ namespace SqlSugar
             return result;
         }
 
+        internal List<DiffLogTableInfo> GetTableDiff(DataTable dt)
+        {
+            List<DiffLogTableInfo> result = new List<DiffLogTableInfo>();
+            if (dt.Rows != null && dt.Rows.Count > 0)
+            {
+                foreach (DataRow row in dt.Rows)
+                {
+                    DiffLogTableInfo item = new DiffLogTableInfo();
+                    item.TableDescription = this.EntityInfo.TableDescription;
+                    item.TableName = this.EntityInfo.DbTableName;
+                    item.Columns = new List<DiffLogColumnInfo>();
+                    foreach (DataColumn col in dt.Columns)
+                    {
+                        try
+                        {
+                            var sugarColumn = this.EntityInfo.Columns.Where(it => it.DbColumnName != null).First(it =>
+                                              it.DbColumnName.Equals(col.ColumnName, StringComparison.CurrentCultureIgnoreCase));
+                            DiffLogColumnInfo addItem = new DiffLogColumnInfo();
+                            addItem.Value = row[col.ColumnName];
+                            addItem.ColumnName = col.ColumnName;
+                            addItem.IsPrimaryKey = sugarColumn.IsPrimarykey;
+                            addItem.ColumnDescription = sugarColumn.ColumnDescription;
+                            item.Columns.Add(addItem);
+                        }
+                        catch (Exception ex)
+                        {
+                            Check.ExceptionEasy(col.ColumnName + " No corresponding entity attribute found in difference log ." + ex.Message, col.ColumnName + "在差异日志中可能没有找到相应的实体属性,详细:" + ex.Message);
+                        }
+                    }
+                    result.Add(item);
+                }
+            }
+            return result;
+        }
         private List<DiffLogTableInfo> GetDiffTable(string sql, List<SugarParameter> parameters)
         {
             List<DiffLogTableInfo> result = new List<DiffLogTableInfo>();

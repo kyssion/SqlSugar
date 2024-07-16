@@ -16,12 +16,14 @@ namespace SqlSugar
         public bool DisableMillisecond { get; set; }
         public bool PgSqlIsAutoToLower { get; set; } = true;
         public bool PgSqlIsAutoToLowerCodeFirst { get; set; } = true;
+        public bool EnableILike { get; set; }
         public bool IsAutoToUpper { get; set; } = true;
         public int DefaultCacheDurationInSeconds { get; set; }
         public bool? TableEnumIsString { get; set; }
         public DateTime? DbMinDate { get; set; } = DateTime.MinValue.Date.AddYears(1900 - 1);
         public bool IsNoReadXmlDescription { get;  set; }
         public bool SqlServerCodeFirstNvarchar { get;  set; }
+        public bool OracleCodeFirstNvarchar2 { get; set; }
         public bool SqliteCodeFirstEnableDefaultValue { get; set; }
         public bool SqliteCodeFirstEnableDescription { get; set; }
         public bool IsAutoUpdateQueryFilter { get; set; }

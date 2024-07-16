@@ -13,7 +13,24 @@ namespace SqlSugar.GBase
         public override string SqlTranslationRight { get { return ""; } }
         public override string GetNoTranslationColumnName(string name)
         {
-            return name;
+            if (name.Contains("="))
+            {
+                name = name.Split('=').First();
+            }
+            name = name.Trim(' ');
+
+            if (string.IsNullOrEmpty(SqlTranslationLeft) ||
+                !name.Contains(SqlTranslationLeft))
+            {
+                return name;
+            }
+
+            if (!name.Contains(".") && name.StartsWith(SqlTranslationLeft) && name.EndsWith(SqlTranslationRight))
+            {
+                return name.TrimStart(Convert.ToChar(SqlTranslationLeft)).TrimEnd(Convert.ToChar(SqlTranslationRight));
+            }
+
+            return name == null ? string.Empty : Regex.Match(name, @".*" + "\\" + SqlTranslationLeft + "(.*?)" + "\\" + SqlTranslationRight + "").Groups[1].Value;
         }
         public override string SqlDateNow
         {
@@ -60,5 +77,4 @@ namespace SqlSugar.GBase
         }
 
     }
-
 }

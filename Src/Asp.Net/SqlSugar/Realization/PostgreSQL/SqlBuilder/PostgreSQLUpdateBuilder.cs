@@ -43,7 +43,7 @@ namespace SqlSugar
             else
             {
                 var type =UtilMethods.GetUnderType(value.GetType());
-                if (type == UtilConstants.DateType||columnInfo.IsArray||columnInfo.IsJson)
+                if (type == UtilConstants.ByteArrayType||type == UtilConstants.DateType||columnInfo.IsArray||columnInfo.IsJson)
                 {
                     var parameterName = this.Builder.SqlParameterKeyWord + name + i;
                     var paramter = new SugarParameter(parameterName, value);
@@ -220,7 +220,14 @@ namespace SqlSugar
                     }
                     else
                     {
-                        result = result.Replace($"{dbColumnName}=T.{dbColumnName}", $"{dbColumnName}={item.Value.Sql.Replace(dbColumnName, $"{Builder.GetTranslationColumnName(this.TableName)}.{dbColumnName}")}");
+                        if (item.Value?.Sql?.StartsWith("( CASE  WHEN")==true)
+                        {
+                            result = result.Replace($"{dbColumnName}=T.{dbColumnName}", $"{dbColumnName}={item.Value.Sql.Replace(" \"", $" {Builder.GetTranslationColumnName(this.TableName)}.\"")}");
+                        }
+                        else
+                        {
+                            result = result.Replace($"{dbColumnName}=T.{dbColumnName}", $"{dbColumnName}={item.Value.Sql.Replace(dbColumnName, $"{Builder.GetTranslationColumnName(this.TableName)}.{dbColumnName}")}");
+                        }
                     }
                     batchUpdateSql = new StringBuilder(result);
                 }
@@ -230,6 +237,10 @@ namespace SqlSugar
         }
         protected override string GetJoinUpdate(string columnsString, ref string whereString)
         {
+            if (this.JoinInfos?.Count > 1) 
+            {
+                return this.GetJoinUpdateMany(columnsString,whereString);
+            }
             var formString = $"  {Builder.GetTranslationColumnName(this.TableName)}  AS {Builder.GetTranslationColumnName(this.ShortName)} ";
             var joinString = "";
             foreach (var item in this.JoinInfos)
@@ -240,6 +251,22 @@ namespace SqlSugar
             var tableName = formString + "\r\n ";
             columnsString = columnsString.Replace(Builder.GetTranslationColumnName(this.ShortName)+".","")+joinString; 
             return string.Format(SqlTemplate, tableName, columnsString, whereString);
+        }
+        private string GetJoinUpdateMany(string columnsString,string where)
+        {
+            var formString = $"  {Builder.GetTranslationColumnName(this.TableName)}  AS {Builder.GetTranslationColumnName(this.ShortName)} ";
+            var joinString = "";
+            var i = 0;
+            foreach (var item in this.JoinInfos)
+            {
+                var whereString = " ON " + item.JoinWhere;
+                joinString += $"\r\n JOIN {Builder.GetTranslationColumnName(item.TableName)}  {Builder.GetTranslationColumnName(item.ShortName)} ";
+                joinString = joinString + whereString;
+                i++;
+            }
+            var tableName = Builder.GetTranslationColumnName(this.TableName) + "\r\n ";
+            columnsString = columnsString.Replace(Builder.GetTranslationColumnName(this.ShortName) + ".", "") + $" FROM {Builder.GetTranslationColumnName(this.TableName)} {Builder.GetTranslationColumnName(this.ShortName)}\r\n " + joinString;
+            return string.Format(SqlTemplate, tableName, columnsString, where);
         }
         public override string FormatDateTimeOffset(object value)
         {

@@ -33,7 +33,8 @@ namespace SqlSugar
         public ISqlBuilder Builder { get; set; }
         #endregion
 
-        #region Splicing basic
+        #region Splicing basic 
+        public bool IsParameterizedConstructor { get; set; }
         public string Hints { get; set; }
         internal AppendNavInfo AppendNavInfo { get; set; }
         public Type[] RemoveFilters { get; set; }
@@ -905,6 +906,10 @@ namespace SqlSugar
             {
                 string pre = null;
                 if (this.JoinQueryInfos.HasValue() && this.JoinQueryInfos.Any(it => TableShortName.HasValue()))
+                {
+                    pre = Builder.GetTranslationColumnName(TableShortName) + ".";
+                }
+                else if (this.EasyJoinInfos?.Count>0 && this.EasyJoinInfos.Any(it => TableShortName.HasValue()))
                 {
                     pre = Builder.GetTranslationColumnName(TableShortName) + ".";
                 }

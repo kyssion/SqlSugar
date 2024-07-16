@@ -270,6 +270,14 @@ namespace SqlSugar
         {
             var result = InsertObjs.First();
             var identityKeys = GetIdentityKeys();
+            if (this.Context?.CurrentConnectionConfig?.MoreSettings?.EnableOracleIdentity == true)
+            {
+                var identity=this.EntityInfo.Columns.FirstOrDefault(it => it.IsIdentity);
+                if (identity != null)
+                {
+                    identityKeys = new List<string>() { identity.DbColumnName };
+                }
+            }
             if (identityKeys.Count == 0)
             {
                 var snowColumn = this.EntityInfo.Columns.FirstOrDefault(it => it.IsPrimarykey && it.UnderType == UtilConstants.LongType);
@@ -549,7 +557,11 @@ namespace SqlSugar
             }
             return this;
         }
-
+        public IInsertable<T> PostgreSQLConflictNothing(string[] columns) 
+        { 
+            this.InsertBuilder.ConflictNothing = columns;
+            return this;
+        }
         public IInsertable<T> MySqlIgnore() 
         {
             this.InsertBuilder.MySqlIgnore = true; 

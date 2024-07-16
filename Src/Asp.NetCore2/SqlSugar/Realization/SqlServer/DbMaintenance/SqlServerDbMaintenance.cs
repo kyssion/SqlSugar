@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -273,7 +274,7 @@ namespace SqlSugar
         {
             get
             {
-                return "select count(*) from sys.objects where [object_id] = OBJECT_ID(N'sp_GetSubLedgerJoinWithdrawalApplicationRecords') and [type] in (N'P')";
+                return "select count(*) from sys.objects where [object_id] = OBJECT_ID(N'{0}') and [type] in (N'P')";
             }
         }
         #endregion
@@ -626,7 +627,10 @@ AND syscomments.text LIKE '%"+tableName+"%'");
                 {
                     if (!FileHelper.IsExistDirectory(databaseDirectory))
                     {
-                        FileHelper.CreateDirectory(databaseDirectory);
+                        if (FileHelper.IsExistDirectory(Path.GetPathRoot(databaseDirectory)))
+                        {
+                            FileHelper.CreateDirectory(databaseDirectory);
+                        }
                     }
                 }
                 catch  

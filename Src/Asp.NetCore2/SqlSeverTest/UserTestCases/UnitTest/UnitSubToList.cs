@@ -95,6 +95,19 @@ namespace OrmTest
                       NickName=SqlFunc.IIF(xx=="",it.NickName,it.NickName)
                      })
                  }, true).ToList();
+
+            var query4= db.Queryable<Demo_Comment>()
+              .Where(u => u.ArticleId == 100)
+               .Select(u => new SysCommentOutput
+               {
+                   SysUsers = SqlFunc.Subqueryable<Demo_User>()
+                   .Where(user => user.Id == u.UserId)
+                   .ToList(user => new SysUserOutput()
+                   {
+                       NickName= user.NickName,
+                       Id = u.UserId == 1 ? 1 : 2
+                   })
+               } ).ToList();
         }
 
         //评论表
@@ -165,6 +178,27 @@ namespace OrmTest
                 disCount = SqlFunc.Subqueryable<Order>().Where(s => s.Id == it.Id).First(s => new Order() { Id = s.Id }, true)
             })
             .ToList();
+
+            var test5 = db.Queryable<Order>().Select(it => new  
+            {
+                COUNT=SqlFunc.Subqueryable<Order>().Where(s => s.Id == it.Id).Count(),
+                Id = it.Id,
+                disCount = SqlFunc.Subqueryable<Order>().Where(s => s.Id == it.Id).ToList(s => new   { Id = s.Id } )
+            })
+           .ToList();
+
+            var test6 = db.Queryable<Order>().Select(it => new
+            {
+                COUNT = SqlFunc.Subqueryable<Order>().Where(s => s.Id == it.Id).Count(),
+                Id = it.Id,
+                disCount = SqlFunc.Subqueryable<Order>().Where(s => s.Id == it.Id).ToList(s => new { Id = s.Id })
+            })
+           .ToListAsync().GetAwaiter().GetResult(); 
+
+            if (test6.Any(it => it.COUNT != it.disCount.Count())|| test5.Any(it => it.COUNT != it.disCount.Count())) 
+            {
+                throw new Exception("unit error");
+            }
         }
         private static void TestJoin4(SqlSugarClient db)
         {

@@ -129,6 +129,11 @@ namespace SqlSugar
                         var inStr = Convert.ToDateTime(item).ToString("yyyy-MM-dd HH:mm:ss.fff");
                         inValues.Add(inStr);
                     }
+                    else if (item != null && item.GetType().FullName== "System.DateOnly")
+                    {
+                        var inStr = UtilMethods.DateOnlyToDateTime(item).ObjToDate().ToString("yyyy-MM-dd");
+                        inValues.Add(inStr);
+                    }
                     else if (item != null && item.GetType()==UtilConstants.ByteArrayType)
                     {
                         var inStr= BitConverter.ToString((byte[])item).Replace("-", "");
@@ -871,13 +876,17 @@ namespace SqlSugar
                                 {
                                     newValue = value.ToString();
                                 }
-                                else if(columnInfo.UnderType==SqlSugar.UtilConstants.GuidType)
+                                else if (value is Enum) 
+                                {
+                                    newValue = Convert.ToInt64(value)+"";
+                                }
+                                else if (columnInfo.UnderType == SqlSugar.UtilConstants.GuidType)
                                 {
                                     newValue = ToGuid(new MethodCallExpressionModel()
                                     {
-                                       Args=new List<MethodCallExpressionArgs>() 
+                                        Args = new List<MethodCallExpressionArgs>()
                                        {
-                                            new MethodCallExpressionArgs(){ 
+                                            new MethodCallExpressionArgs(){
                                               MemberValue=value.ToSqlValue(),
                                               MemberName=value.ToSqlValue()
                                             }
@@ -897,7 +906,7 @@ namespace SqlSugar
                                        }
                                     });
                                 }
-                                else  
+                                else
                                 {
                                     newValue = value.ToSqlValue();
                                 }
@@ -1187,6 +1196,36 @@ namespace SqlSugar
             }
             var searchWord = mode.Args[1].MemberName;
             return $"to_tsvector('chinese', {columns}) @@ to_tsquery('chinese', {searchWord})";
+        }
+
+        public virtual string PgsqlArrayContains(MethodCallExpressionModel model)
+        {
+            // 如果model.Args[1]是一个复杂类型，你可能需要将其转换为字符串或适当的格式  
+            // 在这里，我们假设它是一个可以直接转换为字符串的值  
+            string valueToFind = model.Args[1].MemberValue.ToString(); // 或者使用适当的转换方法  
+            var type = "text";
+            if (model.Args[1].MemberValue is int)
+            {
+                type = "int4";
+            }
+            else if (model.Args[1].MemberValue is long)
+            {
+                type = "int8";
+            }
+            else if (model.Args[1].MemberValue is short)
+            {
+                type = "int2";
+            }
+            if (!UtilMethods.IsNumber(model.Args[1].MemberValue.GetType().Name)) 
+            {
+                valueToFind = $"'{valueToFind}'";
+            }
+            // PostgreSQL查询字符串  
+            string queryCondition = $"{model.Args[0].MemberName}::{type}[] @> ARRAY[{valueToFind}]";
+
+            // 如果需要处理NULL值或其他复杂情况，请在这里添加逻辑  
+
+            return queryCondition;
         }
     }
 }

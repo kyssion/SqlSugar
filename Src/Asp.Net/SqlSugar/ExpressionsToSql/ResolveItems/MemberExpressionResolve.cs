@@ -571,6 +571,10 @@ namespace SqlSugar
                              new MethodCallExpressionArgs() {   MemberName=DateType.Year, MemberValue=DateType.Year}
                          }
                 };
+                if (parameter.CommonTempData is MapperSql) 
+                {
+                    parameter.CommonTempData = ((MapperSql)parameter.CommonTempData).Sql;
+                }
                 AppendMember(parameter, isLeft, GetToDateShort(parameter.CommonTempData.ObjToString()));
             }
             parameter.CommonTempData = oldCommonTempDate;
@@ -782,7 +786,19 @@ namespace SqlSugar
         {
             string fieldName = expression.Member.Name;
             fieldName = this.Context.GetDbColumnName(expression.Expression.Type.Name, fieldName);
+
+            var isSpace = fieldName.Contains(UtilConstants.Space);
+            var guid = string.Empty;
+            if (isSpace)
+            {
+                guid = SnowFlakeSingle.Instance.NextId().ToString();
+                fieldName = fieldName.Replace(UtilConstants.Space, guid);
+            }
             fieldName = Context.GetTranslationColumnName(fieldName);
+            if (isSpace)
+            {
+                fieldName = fieldName.Replace(guid, UtilConstants.Space);
+            }
             return fieldName;
         }
 

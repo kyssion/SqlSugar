@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -10,6 +11,10 @@ namespace SqlSugar
     public abstract partial class DbMaintenanceProvider : IDbMaintenance
     {
         #region DML
+        public List<string> GetProcList() 
+        {
+            return GetProcList(this.Context.Ado.Connection.Database);
+        }
         public virtual List<string> GetProcList(string dbName) 
         {
             return new List<string>();
@@ -336,6 +341,7 @@ namespace SqlSugar
                         value = "empty";
                     }
                 }
+                value = GetDefaultValue(columnInfo, value);
                 var dt = new Dictionary<string, object>();
                 dt.Add(columnInfo.DbColumnName, value);
                 if (columnInfo.DataType.EqualCase("json") && columnInfo.DefaultValue?.Contains("}") == true)
@@ -371,6 +377,14 @@ namespace SqlSugar
             }
             return true;
         }
+        public virtual object GetDefaultValue(DbColumnInfo columnInfo, object value)
+        {
+            if (columnInfo.DataType.ObjToString().ToLower().IsIn("varchar", "nvarchar", "varchar2", "nvarchar2") && !string.IsNullOrEmpty(columnInfo.DefaultValue) && Regex.IsMatch(columnInfo.DefaultValue, @"^\w+$"))
+            {
+                value = columnInfo.DefaultValue;
+            }
+            return value;
+        }
         public virtual bool UpdateColumn(string tableName, DbColumnInfo column)
         {
             tableName = this.SqlBuilder.GetTranslationTableName(tableName);
@@ -404,8 +418,20 @@ namespace SqlSugar
         }
         public virtual bool DropTable<T>() 
         {
-           var tableName= this.Context.EntityMaintenance.GetTableName<T>();
-            return DropTable(tableName);
+            if (typeof(T).GetCustomAttribute<SplitTableAttribute>() != null)
+            {
+                var tables = this.Context.SplitHelper(typeof(T)).GetTables();
+                foreach (var item in tables)
+                {
+                    this.Context.DbMaintenance.DropTable(SqlBuilder.GetTranslationColumnName(item.TableName));
+                }
+                return true;
+            }
+            else
+            {
+                var tableName = this.Context.EntityMaintenance.GetTableName<T>();
+                return DropTable(tableName);
+            }
         }
         public virtual bool DropTable<T,T2>()
         {
@@ -430,8 +456,20 @@ namespace SqlSugar
         }
         public virtual bool TruncateTable<T>()
         {
-            this.Context.InitMappingInfo<T>();
-            return this.TruncateTable(this.Context.EntityMaintenance.GetEntityInfo<T>().DbTableName);
+            if (typeof(T).GetCustomAttribute<SplitTableAttribute>() != null)
+            {
+                var tables = this.Context.SplitHelper(typeof(T)).GetTables();
+                foreach (var item in tables)
+                {
+                    this.Context.DbMaintenance.TruncateTable(SqlBuilder.GetTranslationColumnName(item.TableName));
+                }
+                return true;
+            }
+            else
+            {
+                this.Context.InitMappingInfo<T>();
+                return this.TruncateTable(this.Context.EntityMaintenance.GetEntityInfo<T>().DbTableName);
+            }
         }
         public virtual bool TruncateTable<T,T2>()
         {

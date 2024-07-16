@@ -46,10 +46,7 @@ namespace SqlSugar
         {
             get
             {
-                return @"select view_name name  from user_views 
-                                                WHERE VIEW_name NOT LIKE '%$%'
-                                                AND VIEW_NAME !='PRODUCT_PRIVS'
-                        AND VIEW_NAME NOT LIKE 'MVIEW_%' ";
+                return @"select VIEW_NAME name from all_views WHERE OWNER=SF_GET_SCHEMA_NAME_BY_ID(CURRENT_SCHID) order by VIEW_NAME";
             }
         }
         #endregion
@@ -441,6 +438,7 @@ WHERE table_name = '" + tableName + "'");
 
         private List<DbColumnInfo> GetColumnInfosByTableName(string tableName)
         {
+            List<DbColumnInfo> columns = GetOracleDbType(tableName);
             string sql = "select * from " + SqlBuilder.GetTranslationTableName(tableName) + " WHERE 1=2 ";
             if (!this.GetTableInfoList(false).Any(it => it.Name == SqlBuilder.GetTranslationTableName(tableName).TrimStart('\"').TrimEnd('\"')))
             {
@@ -478,10 +476,54 @@ WHERE table_name = '" + tableName + "'");
                             column.Length = 22;
                         }
                     }
+                    var current = columns.FirstOrDefault(it => it.DbColumnName.EqualCase(column.DbColumnName));
+                    if (current != null)
+                    {
+                        column.OracleDataType = current.DataType;
+                        column.DefaultValue = current.DefaultValue?.TrimStart('\'')?.TrimEnd('\'');
+                    }
                     result.Add(column);
                 }
                 return result;
             }
+        }
+
+        private List<DbColumnInfo> GetOracleDbType(string tableName)
+        {
+            var sql0 = $@"select      
+                                 t1.table_name as TableName,   
+                                 t6.comments,        
+                                 t1.column_id, 
+                                 t1.column_name as DbColumnName,     
+                                 t5.comments,       
+                                 t1.data_type as DataType,     
+                                 t1.data_length as Length,   
+                                 t1.char_length,   
+                                 t1.data_precision,  
+                                 t1.data_scale,     
+                                 t1.nullable, 
+                                 t1.data_default as DefaultValue,
+                                 t4.index_name,     
+                                 t4.column_position,  
+                                 t4.descend          
+                            from user_tab_columns t1   
+                            left join (select t2.table_name,     
+                                              t2.column_name,  
+                                              t2.column_position,  
+                                              t2.descend,      
+                                              t3.index_name        
+                                       from user_ind_columns t2   
+                                       left join user_indexes t3   
+                                         on  t2.table_name = t3.table_name and t2.index_name = t3.index_name
+                                        and t3.status = 'valid' and t3.uniqueness = 'unique') t4   --unique:唯一索引
+                              on  t1.table_name = t4.table_name and t1.column_name = t4.column_name 
+                            left join user_col_comments t5 on   t1.table_name = t5.table_name and t1.column_name = t5.column_name 
+                            left join user_tab_comments t6 on  t1.table_name = t6.table_name
+                            where upper(t1.table_name)=upper('{tableName}')
+                            order by  t1.table_name, t1.column_id";
+
+            var columns = this.Context.Ado.SqlQuery<DbColumnInfo>(sql0);
+            return columns;
         }
 
         private List<string> GetPrimaryKeyByTableNames(string tableName)

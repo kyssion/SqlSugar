@@ -340,6 +340,7 @@ namespace SqlSugar
                     Dictionary<string, object> result = DataReaderToList(reader, tType, classProperties, reval);
                     var stringValue = SerializeObject(result);
                     reval.Add((T)DeserializeObject<T>(stringValue));
+                    SetAppendColumns(reader);
                 }
             }
             return reval;
@@ -430,7 +431,7 @@ namespace SqlSugar
                 {
                     Dictionary<string, object> result = DataReaderToList(reader, tType, classProperties, reval);
                     var stringValue = SerializeObject(result);
-                    reval.Add((T)DeserializeObject<T>(stringValue));
+                    reval.Add((T)DeserializeObject<T>(stringValue)); 
                 }
             }
             return reval;
@@ -441,6 +442,16 @@ namespace SqlSugar
             var readerValues = DataReaderToDictionary(reader, tType);
             var mappingKeys = this.QueryBuilder?.MappingKeys;
             var result = new Dictionary<string, object>();
+            if (UtilMethods.IsTuple(tType, classProperties))
+            {
+                var index = 0;
+                foreach (var item in classProperties)
+                {
+                    result.Add("Item" + (index + 1), reader.GetValue(index));
+                    index++;
+                }
+                return result;
+            }
             foreach (var item in classProperties)
             {
                 var name = item.Name;

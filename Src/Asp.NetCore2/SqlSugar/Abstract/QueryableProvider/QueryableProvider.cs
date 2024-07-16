@@ -848,7 +848,12 @@ namespace SqlSugar
                             FieldName = this.QueryBuilder.Builder.GetTranslationColumnName(column.DbColumnName),
                             FieldValue = disableQueryWhereColumnRemoveTrim?value.ObjToStringNoTrim() : value.ObjToStringNew(),
                             CSharpTypeName = column.PropertyInfo.PropertyType.Name
-                        }); 
+                        });
+                        if (value == null) 
+                        {
+                            data.Value.FieldValue = null;
+                            data.Value.ConditionalType = ConditionalType.EqualNull; 
+                        }
                         if (value is Enum && this.Context.CurrentConnectionConfig?.MoreSettings?.TableEnumIsString != true)
                         {
                             data.Value.FieldValue = Convert.ToInt64(value).ObjToString();
@@ -1235,14 +1240,40 @@ namespace SqlSugar
         public ISugarQueryable<T> SampleBy(int timeNumber, SampleByUnit timeType) 
         {
             SampleByUnit sampleBy = timeType;
-            string sql = "SAMPLE BY "+timeNumber + sampleBy.ToString().Substring(0, 1).ToLower();
-            this.QueryBuilder.SampleBy = sql;
+            if (timeType == SampleByUnit.Month)
+            {
+                string sql = "SAMPLE BY " + timeNumber + sampleBy.ToString().Substring(0, 1);
+                this.QueryBuilder.SampleBy = sql;
+            }
+            else if (timeType == SampleByUnit.Millisecond)
+            {
+                string sql = "SAMPLE BY " + timeNumber + " T ";
+                this.QueryBuilder.SampleBy = sql;
+            }
+            else if (timeType == SampleByUnit.Microsecond)
+            {
+                string sql = "SAMPLE BY " + timeNumber + " U ";
+                this.QueryBuilder.SampleBy = sql;
+            }
+            else
+            {
+                string sql = "SAMPLE BY "+timeNumber + sampleBy.ToString().Substring(0, 1).ToLower();
+                this.QueryBuilder.SampleBy = sql;
+            }
             return this;
         }
         public ISugarQueryable<T> SampleBy(int timeNumber, string timeType)
         {
             string sql = "SAMPLE BY " + timeType;
             this.QueryBuilder.SampleBy = sql;
+            return this;
+        }
+        public ISugarQueryable<T> OrderByPropertyNameIF(bool isOrderBy, string orderPropertyName, OrderByType? orderByType = null) 
+        {
+            if (isOrderBy) 
+            {
+                return this.OrderByPropertyName(orderPropertyName,orderByType);
+            }
             return this;
         }
         public ISugarQueryable<T> OrderByPropertyName(string orderPropertyName, OrderByType? orderByType = null) 
@@ -1647,13 +1678,13 @@ namespace SqlSugar
             }
             else
             {
-                if (this.Context.QueryFilter.Any())
-                {
-                    foreach (var item in tableQueryables)
-                    {
-                        item.QueryBuilder.AppendFilter();
-                    }
-                }
+                //if (this.Context.QueryFilter.Any())
+                //{
+                //    foreach (var item in tableQueryables)
+                //    {
+                //        item.QueryBuilder.AppendFilter();
+                //    }
+                //}
                 var unionall = this.Context._UnionAll(tableQueryables.ToArray());
                 unionall.QueryBuilder.Includes = this.QueryBuilder.Includes;
                 if (unionall.QueryBuilder.Includes?.Any()==true) 

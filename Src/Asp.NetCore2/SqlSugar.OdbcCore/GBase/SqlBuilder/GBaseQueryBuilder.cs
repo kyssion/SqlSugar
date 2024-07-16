@@ -61,7 +61,31 @@ namespace SqlSugar.Odbc
                     this.OrderByValue = null;
                 }
                 if (this.OrderByValue == "ORDER BY ") this.OrderByValue += GetSelectValue.Split(',')[0];
-                result = string.Format(PageTempalte, GetSelectValue, GetTableNameString, GetWhereValueString, GetGroupByString + HavingInfos, GetOrderByString, Skip.ObjToInt() > 0 ? Skip.ObjToInt() : 0, Take);
+                if (OdbcConfig.IsCompatibleWithOldDatabaseVersion&&this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer) 
+                {
+                    //SqlServer2008
+                    var orderby = GetOrderByString;
+                    if (string.IsNullOrEmpty(orderby))
+                    {
+                        orderby = "ORDER BY GETDATE()";
+                    }
+                    var rowNumberString = string.Format(",ROW_NUMBER() OVER({0}) AS RowIndex ", orderby);
+                    result = string.Format("SELECT * FROM ( SELECT {0}{7} FROM {1} {2} {3} {4} ) t  WHERE t.RowIndex BETWEEN {5} AND {6}", GetSelectValue, GetTableNameString, GetWhereValueString, GetGroupByString + HavingInfos, null, Skip.ObjToInt() + 1, Skip.ObjToInt() + Take.ObjToInt(),rowNumberString);
+                }
+                else if (this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer)
+                {
+                    //SqlServer2012+
+                    var orderby = GetOrderByString;
+                    if (string.IsNullOrEmpty(orderby)) 
+                    {
+                        orderby = "ORDER BY GETDATE()";
+                    }
+                    result = string.Format("SELECT {0} FROM {1} {2} {3} {4}  OFFSET {5} ROWS FETCH NEXT {6} ROWS ONLY", GetSelectValue, GetTableNameString, GetWhereValueString, GetGroupByString + HavingInfos, orderby, Skip.ObjToInt() > 0 ? Skip.ObjToInt() : 0, Take);
+                }
+                else
+                {
+                    result = string.Format(PageTempalte, GetSelectValue, GetTableNameString, GetWhereValueString, GetGroupByString + HavingInfos, GetOrderByString, Skip.ObjToInt() > 0 ? Skip.ObjToInt() : 0, Take);
+                }
             }
             else
             {

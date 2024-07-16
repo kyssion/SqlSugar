@@ -113,15 +113,29 @@ namespace SqlSugar
                 return 0;
             }
             var result = 0;
+            if (this.Context.CurrentConnectionConfig?.MoreSettings?.IsCorrectErrorSqlParameterName == true) 
+            {
+                UpdateBuilder.Parameters = UpdateBuilder.Parameters.Where(it => UtilMethods.NoErrorParameter(it.ParameterName)).ToList();
+            }
+            List<SugarParameter> oldParas = null;
+            if (IsEnableDiffLogEvent)
+            {
+                oldParas=UtilMethods.CopySugarParameters(UpdateBuilder.Parameters);
+            }
             if (sql != Environment.NewLine)
             {
                 result = this.Ado.ExecuteCommand(sql, UpdateBuilder.Parameters == null ? null : UpdateBuilder.Parameters.ToArray());
             }
+            if (oldParas != null&& UpdateBuilder.Parameters!=null) 
+            {
+                if (string.Join(",", oldParas.Select(it => it.ParameterName)) != string.Join(",", UpdateBuilder.Parameters.Select(it => it.ParameterName)))
+                {
+                    UpdateBuilder.Parameters = oldParas;
+                }
+            }
             After(sql);
             return result;
-        }
-
-
+        } 
         public bool ExecuteCommandHasChange()
         {
             return this.ExecuteCommand() > 0;
@@ -169,7 +183,7 @@ namespace SqlSugar
                 return 0;
             }
             var result = await this.Ado.ExecuteCommandAsync(sql, UpdateBuilder.Parameters == null ? null : UpdateBuilder.Parameters.ToArray());
-            After(sql);
+            After(sql); 
             return result;
         }
         public Task<bool> ExecuteCommandHasChangeAsync(CancellationToken token) 
@@ -210,6 +224,11 @@ namespace SqlSugar
             result.updateableObj.UpdateBuilder.JoinInfos = querybale.QueryBuilder.JoinQueryInfos;
             result.updateableObj.UpdateBuilder.ShortName = joinExpress.Parameters.FirstOrDefault()?.Name;
             return result;
+        }
+        public IUpdateable<T, T2> InnerJoin<T2>(ISugarQueryable<T> queryable, Expression<Func<T, T2, bool>> joinExpress) 
+        {
+            var tableName=$" ({queryable.Clone().ToSqlString()}) ";;
+            return this.InnerJoin(joinExpress, tableName);
         }
         public IUpdateable<T, T2> InnerJoin<T2>(Expression<Func<T, T2, bool>> joinExpress,string TableName)
         {
@@ -898,7 +917,10 @@ namespace SqlSugar
         }
         public IUpdateable<T> WhereIF(bool isWhere, Expression<Func<T, bool>> expression) 
         {
-            Check.ExceptionEasy(!StaticConfig.EnableAllWhereIF, "Need to program startup configuration StaticConfig. EnableAllWhereIF = true; Tip: This operation is very risky if there are no conditions it is easy to update the entire table", " 需要程序启动时配置StaticConfig.EnableAllWhereIF=true; 提示：该操作存在很大的风险如果没有条件很容易将整个表全部更新");
+            if (UpdateBuilder.WhereValues.Any() != true)
+            {
+                Check.ExceptionEasy(!StaticConfig.EnableAllWhereIF, "Need to program startup configuration StaticConfig. EnableAllWhereIF = true; Tip: This operation is very risky if there are no conditions it is easy to update the entire table", " 需要程序启动时配置StaticConfig.EnableAllWhereIF=true; 提示：该操作存在很大的风险如果没有条件很容易将整个表全部更新");
+            }
             if (isWhere) 
             {
                 return Where(expression);
