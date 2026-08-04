@@ -90,7 +90,7 @@ namespace SqlSugar
             }
             else 
             {
-                return thisValue.ObjToStringNoTrim();
+                return thisValue+string.Empty;
             }
         }
         public static string ObjToString(this object thisValue)
@@ -108,6 +108,10 @@ namespace SqlSugar
             if (thisValue != null && thisValue is byte[])
             {
                 return string.Join("|",thisValue as byte[]);
+            }
+            if (thisValue!=null&&thisValue?.GetType()?.Name == "DateOnly") 
+            {
+                return Convert.ToDateTime(thisValue.ToString()).ToString("yyyy-MM-dd");
             }
             if (thisValue != null) return thisValue.ToString().Trim();
             return "";

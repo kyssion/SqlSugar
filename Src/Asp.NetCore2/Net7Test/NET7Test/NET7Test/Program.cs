@@ -53,17 +53,38 @@ static void MyTest()
     sqlugar.Updateable(new UnitDatez211afa2222()).WhereColumns(it=>it.timeOnly).ExecuteCommand();
     sqlugar.Insertable(new UnitDatez211afa2222() { dateOnly=DateOnly.FromDateTime(DateTime.Now) }).ExecuteCommand();
     var list2=sqlugar.Queryable<UnitDatez211afa2222>().ToList();
+
+    var db = sqlugar;
+    // 建表
+    var typeBilder = db.DynamicBuilder().CreateClass("stats_values", new());
+    typeBilder.CreateProperty("date", typeof(DateOnly), new() { IsPrimaryKey = true });
+    typeBilder.CreateProperty("d1", typeof(uint), new() { ColumnDataType = "INT UNSIGNED" });
+    typeBilder.CreateProperty("d2", typeof(uint), new() { ColumnDataType = "INT UNSIGNED" });
+    var type = typeBilder.BuilderType();
+    db.CodeFirst.InitTables(type);
+
+    // 保存数据
+    var currentDate = DateOnly.FromDateTime(DateTime.Now);
+    var stats = new Dictionary<string, object>
+    {
+        ["date"] = currentDate,
+        ["d1"] = 1,
+        ["d2"] = 2
+    };
+    var statsValue = db.DynamicBuilder().CreateObjectByType(type, stats);
+    db.StorageableByObject(statsValue).ExecuteCommand(); 
 }
 static void ServerTest()
 {
     var sqlugar = new SqlSugarClient(new ConnectionConfig()
     {
         DbType = DbType.SqlServer,
-        ConnectionString = "SERVER=.;uid=sa;pwd=sasa;database=SqlSugar4Text4"
+        ConnectionString = "SERVER=.;uid=sa;pwd=sasa;database=SqlSugar4Text4;Encrypt=True;TrustServerCertificate=True"
     },
     it =>
     {
-        it.Aop.OnLogExecuting = (s, p) => Console.WriteLine(s, p);
+        it.Aop.OnLogExecuting = (s, p) =>
+        Console.WriteLine(s, p);
     });
 
     var payload = JsonSerializer.SerializeToNode(new { id = 1 });
@@ -138,6 +159,32 @@ static void ServerTest()
     var list2111 = sqlugar.Queryable<UnitDatezaaaa>()
     .Where(it => dates.Contains(it.dateOnly.Value))
     .ToList();
+
+    sqlugar.CodeFirst.InitTables<FInfo, ViewWorker>();
+    sqlugar.Insertable(new FInfo()
+    {
+         CustName="a",
+           CustNum="1",
+            Id=1
+
+    }).ExecuteCommand();
+
+    sqlugar.Insertable(new ViewWorker()
+    {
+         StartTime=DateOnly.FromDateTime(DateTime.Now)
+    }).ExecuteCommand();
+    //用例代码 
+    var detail = sqlugar.Queryable<FInfo>() 
+    .LeftJoin<ViewWorker>((left, right) =>true)
+    .Select((left, right) => new {
+        left.Id,
+        left.CustName,
+        left.CustNum,
+        ViewWorker = right
+    }).First();
+    sqlugar.CodeFirst.InitTables<Unitadfadfassyss>(); 
+    sqlugar.Storageable(new Unitadfadfassyss() { Code = "a", dateOnly = DateOnly.Parse("2020-1-1"), Name = "a" })
+        .WhereColumns(it=>new { it.Code,it.dateOnly }).ExecuteCommand();
 }
 
 
@@ -184,7 +231,39 @@ static void OracleTest()
         .Select<(int id, string name)>().ToList();
 }
 
+//用例实体
+public class FInfo
+{
+    [SugarColumn(ColumnName = "ID", ColumnDataType = "int", IsPrimaryKey = true, IsIdentity = true)]
+    public int Id { get; set; }
 
+    [SugarColumn(ColumnName = "CustName", ColumnDataType = "nvarchar", IsNullable = true)]
+    public string? CustName { get; set; }
+
+    [SugarColumn(ColumnName = "CustNum", ColumnDataType = "nvarchar", IsNullable = true)]
+    public string? CustNum { get; set; }
+}
+//用例实体
+public class ViewWorker
+{
+    [SugarColumn(ColumnName = "id", ColumnDataType = "int")] // 可根据需要设置主键、自增等属性
+    public int Id { get; set; }
+
+    [SugarColumn(ColumnName = "name", ColumnDataType = "nvarchar", IsNullable = true)]
+    public string? Name { get; set; }
+
+    [SugarColumn(ColumnName = "type", ColumnDataType = "nvarchar", IsNullable = true)]
+    public string? Type { get; set; }
+
+    [SugarColumn(ColumnName = "start_time", ColumnDataType = "date", IsNullable = true)]
+    public DateOnly? StartTime { get; set; }
+
+    [SugarColumn(ColumnName = "end_time", ColumnDataType = "date", IsNullable = true)]
+    public DateOnly? EndTime { get; set; }
+
+    [SugarColumn(ColumnName = "price", ColumnDataType = "real", IsNullable = true)]
+    public float? Price { get; set; }
+}
 public class Unitadfafa 
 {
     [SugarColumn(SqlParameterDbType =typeof(CommonPropertyConvert))]
@@ -215,5 +294,11 @@ public class UnitDatez211afa2222
     [SugarColumn(IsNullable =true)]
     public TimeOnly? timeOnly { get; set; }
     [SugarColumn(IsNullable = true)]
+    public DateOnly? dateOnly { get; set; }
+}
+public class Unitadfadfassyss 
+{
+    public string Name { get; set; }
+    public string Code { get; set; }
     public DateOnly? dateOnly { get; set; }
 }

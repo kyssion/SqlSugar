@@ -56,7 +56,7 @@ namespace SqlSugar.OceanBaseForOracle
             else
             {
                 var bigSize = 500;
-                if (groupList.Count < bigSize)
+                if (groupList.Count < bigSize || this.Context?.CurrentConnectionConfig?.MoreSettings?.EnableOracleIdentity == true)
                 {
                     string result = Small(identities, groupList, columnsString);
                     return result;
@@ -76,7 +76,7 @@ namespace SqlSugar.OceanBaseForOracle
                 var sql = Small(identities, groupListPasge, columnsString);
                 this.Context.Ado.ExecuteCommand(sql, this.Parameters);
             });
-            if (identities != null & identities.Count > 0 && this.OracleSeqInfoList != null && this.OracleSeqInfoList.Any())
+            if (identities != null && identities.Count > 0 && this.OracleSeqInfoList != null && this.OracleSeqInfoList.Any())
             {
                 return $"SELECT {this.OracleSeqInfoList.First().Value - 1} FROM DUAL";
             }
@@ -176,6 +176,16 @@ namespace SqlSugar.OceanBaseForOracle
                 else if (type.IsEnum())
                 {
                     return Convert.ToInt64(value);
+                }
+                else if (value is TimeSpan ts)
+                {
+                    return string.Format(
+                               "INTERVAL '{0} {1:D2}:{2:D2}:{3:D2}.{4:D3}' DAY TO SECOND(3)",
+                               ts.Days,
+                               ts.Hours,
+                               ts.Minutes,
+                               ts.Seconds,
+                               ts.Milliseconds);
                 }
                 else if (type == UtilConstants.ByteArrayType)
                 {

@@ -98,6 +98,10 @@ namespace SqlSugar
             var isVarchar = this.Context.IsVarchar();
             foreach (var parameter in parameters)
             {
+                if (parameter.DbType==System.Data.DbType.Int64&&parameter.Value?.Equals("Result%")==true) 
+                {
+                    parameter.DbType = System.Data.DbType.AnsiString;
+                }
                 UNumber(parameter);
                 if (parameter.Value == null) parameter.Value = DBNull.Value;
                 if (parameter.Value is System.Data.SqlTypes.SqlDateTime && parameter.DbType == System.Data.DbType.AnsiString)
@@ -246,6 +250,7 @@ namespace SqlSugar
             { typeof(short[]),NpgsqlDbType.Smallint},
             { typeof(long[]),NpgsqlDbType.Bigint},
             { typeof(decimal[]),NpgsqlDbType.Numeric},
+            { typeof(double[]),NpgsqlDbType.Double},
             { typeof(char[]),NpgsqlDbType.Text},
             { typeof(byte[]),NpgsqlDbType.Bytea},
             { typeof(bool[]),NpgsqlDbType.Boolean},
@@ -258,6 +263,7 @@ namespace SqlSugar
             { typeof(short?[]),NpgsqlDbType.Smallint},
             { typeof(long?[]),NpgsqlDbType.Bigint},
             { typeof(decimal?[]),NpgsqlDbType.Numeric},
+            { typeof(double?[]),NpgsqlDbType.Double},
             { typeof(char?[]),NpgsqlDbType.Text},
             { typeof(byte?[]),NpgsqlDbType.Bytea},
             { typeof(bool?[]),NpgsqlDbType.Boolean},

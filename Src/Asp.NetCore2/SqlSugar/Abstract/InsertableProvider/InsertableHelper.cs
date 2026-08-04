@@ -42,11 +42,15 @@ namespace SqlSugar
                 foreach (var item in InsertBuilder.DbColumnInfoList)
                 {
                     var isPk = pks.Any(y => y.Equals(item.DbColumnName, StringComparison.CurrentCultureIgnoreCase)) || item.IsPrimarykey;
-                    if (isPk && item.PropertyType == UtilConstants.GuidType && item.Value.ObjToString() == Guid.Empty.ToString())
+                    if (isPk && item.PropertyType == UtilConstants.GuidType && item.Value is Guid guid && guid == Guid.Empty)
                     {
                         if (StaticConfig.CustomGuidFunc != null)
                         {
                             item.Value = StaticConfig.CustomGuidFunc();
+                        }
+                        else if (StaticConfig.CustomGuidByValueFunc != null&& item.Value is Guid guidValue) 
+                        {
+                            item.Value = StaticConfig.CustomGuidByValueFunc(guidValue);
                         }
                         else
                         {
@@ -120,9 +124,13 @@ namespace SqlSugar
                     {
                         continue;
                     }
-                    if (item.SqlParameterDbType is Type) 
+                    if (item.SqlParameterDbType is Type)
                     {
                         continue;
+                    }
+                    else if (item.SqlParameterDbType is System.Data.DbType dbtype) 
+                    {
+                        paramters.DbType = dbtype;
                     }
                     if (item.IsJson)
                     {
@@ -317,7 +325,7 @@ namespace SqlSugar
                 {
                     column.DbColumnName = column.PropertyName;
                 }
-                if (isMapping)
+                if (isMapping&&column.ForOwnsOnePropertyInfo==null)
                 {
                     columnInfo.DbColumnName = GetDbColumnName(column.PropertyName);
                 }
@@ -343,8 +351,14 @@ namespace SqlSugar
                 }
                 if (column.IsJson && columnInfo.Value != null)
                 {
-                    if (columnInfo.Value != null)
+                    if (this.InsertBuilder.SerializeObjectFunc != null&& columnInfo.Value != null)
+                    {
+                          columnInfo.Value = this.InsertBuilder.SerializeObjectFunc(columnInfo.Value);
+                    }
+                    else if (columnInfo.Value != null)
+                    {
                         columnInfo.Value = this.Context.Utilities.SerializeObject(columnInfo.Value);
+                    }
                 }
                 //var tranColumn=EntityInfo.Columns.FirstOrDefault(it => it.IsTranscoding && it.DbColumnName.Equals(column.DbColumnName, StringComparison.CurrentCultureIgnoreCase));
                 if (column.IsTranscoding && columnInfo.Value.HasValue())
@@ -361,7 +375,7 @@ namespace SqlSugar
                 {
                     var name = disItem.Split(':').First();
                     var value = disItem.Split(':').Last();
-                    insertItem.Add(new DbColumnInfo() { DbColumnName = name, PropertyName = name, PropertyType = typeof(string), Value = value });
+                    insertItem.Add(new DbColumnInfo() { TableId=i, DbColumnName = name, PropertyName = name, PropertyType = typeof(string), Value = value });
                 }
             }
         }
@@ -741,6 +755,7 @@ namespace SqlSugar
             foreach (var item in this.InsertObjs)
             {
                 var insertable = this.Context.Insertable(item)
+                    .AS(this.InsertBuilder.AsName)
                     .InsertColumns(this.InsertBuilder.DbColumnInfoList.Select(it => it.DbColumnName).Distinct().ToArray());
                 if (pkInfo.UnderType == UtilConstants.IntType)
                 {

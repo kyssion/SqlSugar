@@ -13,10 +13,12 @@ namespace SqlSugar
     {
         public override bool IsActionUpdateColumns { get; set; } = true;
         public override DbFastestProperties DbFastestProperties { get; set; } = new DbFastestProperties() {
-          HasOffsetTime=true
+          HasOffsetTime=true,
+          IsConvertDateTimeOffsetToDateTime=true
         };
         public async Task<int> ExecuteBulkCopyAsync(DataTable dt)
         {
+            dt = UtilMethods.ConvertDateTimeOffsetToDateTime(dt);
             if (DbFastestProperties?.IsOffIdentity == true)
             {
                 var isNoTran = this.Context.Ado.IsNoTran()&&this.Context.CurrentConnectionConfig.IsAutoCloseConnection;
@@ -50,8 +52,10 @@ namespace SqlSugar
         {
             var queryable = this.Context.Queryable<T>();
             var tableName = queryable.SqlBuilder.GetTranslationTableName(dt.TableName);
+            var sqlBuilder = this.Context.Queryable<object>().SqlBuilder;
+            var dts = dt.Columns.Cast<DataColumn>().Select(it => sqlBuilder.GetTranslationColumnName(it.ColumnName)).ToList();
             dt.TableName = "temp" + SnowFlakeSingle.instance.getID();
-            var sql = queryable.AS(tableName).Where(it => false).ToSql().Key;
+            var sql = queryable.AS(tableName).Where(it => false).Select(string.Join(",", dts)).ToSql().Key;
             await this.Context.Ado.ExecuteCommandAsync($"CREATE  TABLE {dt.TableName}    as ( {sql} ) ");
         }
         public override string UpdateSql { get; set; } = @"UPDATE  {1} TM    INNER JOIN {2} TE  ON {3} SET {0} ";

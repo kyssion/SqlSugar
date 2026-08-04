@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -288,6 +288,13 @@ namespace SqlSugar
         #endregion
 
         #region Methods 
+        public override bool DropIndex(string indexName, string tableName)
+        {
+            indexName = this.SqlBuilder.GetNoTranslationColumnName(indexName);
+            tableName = this.SqlBuilder.GetNoTranslationColumnName(tableName);
+            this.Context.Ado.ExecuteCommand($" DROP INDEX  {indexName}  ON {tableName}");
+            return true;
+        }
         public override List<DbColumnInfo> GetColumnInfosByTableName(string tableName, bool isCache = true)
         {
             if (DorisHelper.IsDoris(this.Context))
@@ -713,9 +720,16 @@ WHERE EVENT_OBJECT_TABLE = '" + tableName + "'");
 
                 try
                 {
-                    Assembly currentAssembly = Assembly.GetExecutingAssembly();
-                    string exePath = currentAssembly.Location.Replace("SqlSugar.dll", "MySqlBackupNet.MySqlConnector.dll");
-                    assembly = Assembly.LoadFrom(exePath);
+                    if (StaticConfig.Backup_MySqlBackupType != null)
+                    {
+                        assembly = StaticConfig.Backup_MySqlBackupType.Assembly;
+                    }
+                    else
+                    {
+                        Assembly currentAssembly = Assembly.GetExecutingAssembly();
+                        string exePath = currentAssembly.Location.Replace("SqlSugar.dll", "MySqlBackupNet.MySqlConnector.dll");
+                        assembly = Assembly.LoadFrom(exePath);
+                    }
                 }
                 catch (Exception)
                 {
@@ -735,6 +749,23 @@ WHERE EVENT_OBJECT_TABLE = '" + tableName + "'");
                 // Invoke the ExportToFile method
                 exportMethod.Invoke(mb, new object[] { fullFileName });
             }
+            return true;
+        }
+        public override bool CreateIndex(string tableName, string[] columnNames, string IndexName, bool isUnique = false)
+        {
+            var include = "";
+            if (IndexName.ToLower().Contains("{include:"))
+            {
+                include = Regex.Match(IndexName, @"\{include\:.+$").Value;
+                IndexName = IndexName.Replace(include, "");
+                if (include == null)
+                {
+                    throw new Exception("include format error");
+                }
+                include = "";
+            }
+            string sql = string.Format("CREATE {3} INDEX {2} ON {0}({1})" + include, this.SqlBuilder.GetTranslationColumnName(tableName), string.Join(",", columnNames), IndexName, isUnique ? "UNIQUE" : "");
+            this.Context.Ado.ExecuteCommand(sql);
             return true;
         }
 

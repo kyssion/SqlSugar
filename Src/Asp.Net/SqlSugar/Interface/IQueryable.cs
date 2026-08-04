@@ -20,8 +20,10 @@ namespace SqlSugar
         ISugarQueryable<T> Hints(string hints);
         ISugarQueryable<T> AS<T2>(string tableName);
         ISugarQueryable<T> AS(string tableName);
+        ISugarQueryable<T> IF(bool condition, Action<ISugarQueryable<T>> action);
         ISugarQueryable<T> AsWithAttr();
         ISugarQueryable<T> AsType(Type tableNameType);
+        ISugarQueryable<Type> Cast<Type>();
         ISugarQueryable<T> With(string withString);
         //ISugarQueryable<T> CrossQueryWithAttr();
         ISugarQueryable<T> CrossQuery<Type>(string configId);
@@ -117,6 +119,7 @@ namespace SqlSugar
         ISugarQueryable<T> OrderByPropertyName(string orderPropertyName,OrderByType? orderByType=null);
         ISugarQueryable<T> OrderByPropertyNameIF(bool isOrderBy,string orderPropertyName, OrderByType? orderByType = null);
         ISugarQueryable<T> OrderBy(Expression<Func<T, object>> expression, OrderByType type = OrderByType.Asc);
+        ISugarQueryable<T> OrderBy(string expShortName, FormattableString expOrderBy, OrderByType type = OrderByType.Asc);
         ISugarQueryable<T> OrderByDescending(Expression<Func<T, object>> expression);
         ISugarQueryable<T> OrderByIF(bool isOrderBy, string orderByFields);
         ISugarQueryable<T> OrderByIF(bool isOrderBy, Expression<Func<T, object>> expression, OrderByType type = OrderByType.Asc);
@@ -154,12 +157,14 @@ namespace SqlSugar
         Task<bool> AnyAsync(Expression<Func<T, bool>> expression, CancellationToken token);
         bool Any();
         Task<bool> AnyAsync();
+        Task<bool> AnyAsync(CancellationToken token);
         ISugarQueryable<TResult> Select<TResult>(string expShortName, FormattableString expSelect, Type resultType);
         ISugarQueryable<TResult> Select<TResult>(Dictionary<string, Type> keyIsShortName_ValueIsType_Dictionary, FormattableString expSelect, Type resultType);
         ISugarQueryable<TResult> Select<TResult>(string expShortName, FormattableString expSelect,Type EntityType, Type resultType);
         ISugarQueryable<T> Select(string expShortName, FormattableString expSelect, Type resultType);
         ISugarQueryable<TResult> Select<TResult>(Expression expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, TResult>> expression);
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, TResult>> trueSelectExpression, Expression<Func<T, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, TResult>> expression,bool isAutoFill);
         ISugarQueryable<TResult> Select<TResult>();
         ISugarQueryable<TResult> Select<TResult>(string select);
@@ -168,6 +173,7 @@ namespace SqlSugar
         ISugarQueryable<T> MergeTable();
         void ForEachDataReader(Action<T> action);
         Task ForEachDataReaderAsync(Action<T> action);
+        IEnumerable<T> GetEnumerable();
         void ForEach(Action<T> action, int singleMaxReads = 300, System.Threading.CancellationTokenSource cancellationTokenSource = null);
         Task ForEachAsync(Action<T> action, int singleMaxReads = 300, System.Threading.CancellationTokenSource cancellationTokenSource = null);
         void ForEachByPage(Action<T> action, int pageIndex, int pageSize, ref int totalNumber, int singleMaxReads = 300, System.Threading.CancellationTokenSource cancellationTokenSource = null);
@@ -268,6 +274,16 @@ namespace SqlSugar
         Task<DataTable> ToDataTablePageAsync(int pageNumber, int pageSize, RefAsync<int> totalNumber);
         Task<DataTable> ToDataTableByEntityPageAsync(int pageNumber, int pageSize, RefAsync<int> totalNumber);
 
+
+        DataTable ToOffsetDataTablePage(int pageNumber, int pageSize);
+        Task<DataTable> ToOffsetDataTablePageAsync(int pageNumber, int pageSize);
+        DataTable ToOffsetDataTablePage(int pageNumber, int pageSize, ref int totalNumber);
+        DataTable ToOffsetDataTableByEntityPage(int pageNumber, int pageSize, ref int totalNumber);
+        DataTable ToOffsetDataTablePage(int pageNumber, int pageSize, ref int totalNumber, ref int totalPage);
+        Task<DataTable> ToOffsetDataTablePageAsync(int pageNumber, int pageSize, RefAsync<int> totalNumber);
+        Task<DataTable> ToOffsetDataTableByEntityPageAsync(int pageNumber, int pageSize, RefAsync<int> totalNumber);
+
+
         List<T> ToOffsetPage(int pageNumber, int pageSize);
         List<T> ToOffsetPage(int pageNumber, int pageSize,ref int totalNumber);
         List<T> ToOffsetPage(int pageNumber, int pageSize, ref int totalNumber,ref int totalPage);
@@ -320,6 +336,7 @@ namespace SqlSugar
     }
     public partial interface ISugarQueryable<T, T2> : ISugarQueryable<T>
     {
+        new ISugarQueryable<T,T2> IF(bool condition, Action<ISugarQueryable<T>> action);
         new ISugarQueryable<T,T2> Hints(string hints);
         new ISugarQueryable<T,T2> SampleBy(int timeNumber, SampleByUnit timeType);
         new ISugarQueryable<T,T2> SampleBy(int timeNumber, string timeType);
@@ -336,6 +353,11 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3> FullJoin<T3>(Expression<Func<T, T2, T3, bool>> joinExpression);
         ISugarQueryable<T, T2, T3> InnerJoin<T3>(Expression<Func<T, T2, T3, bool>> joinExpression);
         ISugarQueryable<T, T2, T3> RightJoin<T3>(Expression<Func<T, T2, T3, bool>> joinExpression);
+        
+        ISugarQueryable<T, T2, T3> LeftJoinIF<T3>(bool isJoin, Expression<Func<T, T2, T3, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3> FullJoinIF<T3>(bool isJoin, Expression<Func<T, T2, T3, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3> InnerJoinIF<T3>(bool isJoin, Expression<Func<T, T2, T3, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3> RightJoinIF<T3>(bool isJoin, Expression<Func<T, T2, T3, bool>> joinExpression, string tableName);
 
         ISugarQueryable<T, T2, T3> LeftJoin<T3>(Expression<Func<T, T2, T3, bool>> joinExpression,string tableName);
         ISugarQueryable<T, T2, T3> FullJoin<T3>(Expression<Func<T, T2, T3, bool>> joinExpression,string tableName);
@@ -371,6 +393,8 @@ namespace SqlSugar
         #region Select
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T,T2, TResult>> expression, bool isAutoFill);
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, TResult>> trueSelectExpression, Expression<Func<T,T2, TResult>> falseSelectExpression);
+
         #endregion
 
         #region OrderBy
@@ -450,6 +474,7 @@ namespace SqlSugar
     }
     public partial interface ISugarQueryable<T, T2, T3> : ISugarQueryable<T>
     {
+        new ISugarQueryable<T, T2,T3> IF(bool condition, Action<ISugarQueryable<T>> action);
         new ISugarQueryable<T, T2,T3> Hints(string hints);
         new ISugarQueryable<T, T2,T3> SampleBy(int timeNumber, SampleByUnit timeType);
         new ISugarQueryable<T, T2,T3> SampleBy(int timeNumber, string timeType);
@@ -470,6 +495,11 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3, T4> FullJoin<T4>(Expression<Func<T, T2, T3, T4, bool>> joinExpression,string tableName);
         ISugarQueryable<T, T2, T3, T4> InnerJoin<T4>(Expression<Func<T, T2, T3, T4, bool>> joinExpression,string tableName);
         ISugarQueryable<T, T2, T3, T4> RightJoin<T4>(Expression<Func<T, T2, T3, T4, bool>> joinExpression,string tableName);
+
+        ISugarQueryable<T, T2, T3,T4> LeftJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3,T4, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3,T4> FullJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3,T4, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3,T4> InnerJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3,T4, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3,T4> RightJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3,T4, bool>> joinExpression, string tableName);
         #region Where
         new ISugarQueryable<T, T2,T3> Where(string expShortName, FormattableString expressionString);
         new ISugarQueryable<T, T2, T3> Where(Expression<Func<T, bool>> expression);
@@ -503,6 +533,7 @@ namespace SqlSugar
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2,T3, TResult>> expression, bool isAutoFill);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression);
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2,T3, TResult>> trueSelectExpression, Expression<Func<T, T2,T3, TResult>> falseSelectExpression);
         #endregion
 
         #region OrderBy
@@ -595,6 +626,7 @@ namespace SqlSugar
     }
     public partial interface ISugarQueryable<T, T2, T3, T4> : ISugarQueryable<T>
     {
+        new ISugarQueryable<T, T2,T3,T4> IF(bool condition, Action<ISugarQueryable<T>> action);
         new ISugarQueryable<T, T2, T3,T4> Hints(string hints);
         new ISugarQueryable<T, T2, T3,T4> SampleBy(int timeNumber, SampleByUnit timeType);
         new ISugarQueryable<T, T2, T3,T4> SampleBy(int timeNumber, string timeType);
@@ -614,6 +646,10 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3, T4, T5> FullJoin<T5>(Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
         ISugarQueryable<T, T2, T3, T4, T5> InnerJoin<T5>(Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
         ISugarQueryable<T, T2, T3, T4, T5> RightJoin<T5>(Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3, T4,T5> LeftJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3, T4, T5> FullJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3, T4, T5> InnerJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
+        ISugarQueryable<T, T2, T3, T4, T5> RightJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName);
 
         #region Where
         new ISugarQueryable<T, T2, T3,T4> Where(string expShortName, FormattableString expressionString);
@@ -650,6 +686,7 @@ namespace SqlSugar
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, TResult>> expression);
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3,T4, TResult>> trueSelectExpression, Expression<Func<T, T2, T3,T4, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3,T4, TResult>> expression, bool isAutoFill);
         #endregion
 
@@ -746,6 +783,7 @@ namespace SqlSugar
     }
     public partial interface ISugarQueryable<T, T2, T3, T4, T5> : ISugarQueryable<T>
     {
+        new ISugarQueryable<T, T2,T3,T4,T5> IF(bool condition, Action<ISugarQueryable<T>> action);
         new ISugarQueryable<T, T2, T3, T4,T5> Hints(string hints);
         new ISugarQueryable<T, T2, T3, T4,T5> SampleBy(int timeNumber, SampleByUnit timeType);
         new ISugarQueryable<T, T2, T3, T4,T5> SampleBy(int timeNumber, string timeType);
@@ -800,6 +838,7 @@ namespace SqlSugar
         #endregion
 
         #region Select
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4,T5, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4,T5, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, TResult>> expression);
@@ -892,10 +931,13 @@ namespace SqlSugar
     }
     public partial interface ISugarQueryable<T, T2, T3, T4, T5, T6> : ISugarQueryable<T>
     {
+        new ISugarQueryable<T, T2, T3, T4, T5, T6> IF(bool condition, Action<ISugarQueryable<T>> action);
         new ISugarQueryable<T, T2, T3, T4, T5,T6> Hints(string hints);
         ISugarQueryable<TResult> SelectMergeTable<TResult>(Expression<Func<T, T2, T3, T4, T5,T6, TResult>> expression);
         ISugarQueryable<T, T2, T3, T4, T5, T6,T7> LeftJoinIF<T7>(bool isLeftJoin, Expression<Func<T, T2, T3, T4, T5, T6,T7, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6,T7> InnerJoinIF<T7>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, T6,T7, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7> LeftJoinIF<T7>(bool isJoin, ISugarQueryable<T7> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7> InnerJoinIF<T7>(bool isJoin, ISugarQueryable<T7> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7> LeftJoin<T7>(ISugarQueryable<T7> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7> InnerJoin<T7>(ISugarQueryable<T7> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7> RightJoin<T7>(ISugarQueryable<T7> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, bool>> joinExpression);
@@ -945,6 +987,7 @@ namespace SqlSugar
         #endregion
 
         #region Select
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5,T6, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5,T6, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, TResult>> expression);
@@ -1052,6 +1095,8 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> LeftJoin<T8>(ISugarQueryable<T8> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> InnerJoin<T8>(ISugarQueryable<T8> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> RightJoin<T8>(ISugarQueryable<T8> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> LeftJoinIF<T8>(bool isJoin, ISugarQueryable<T8> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> InnerJoinIF<T8>(bool isJoin, ISugarQueryable<T8> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> LeftJoin<T8>(Expression<Func<T, T2, T3, T4, T5, T6, T7,T8, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> FullJoin<T8>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8> InnerJoin<T8>(Expression<Func<T, T2, T3, T4, T5, T6, T7,T8, bool>> joinExpression);
@@ -1100,6 +1145,7 @@ namespace SqlSugar
         #endregion
 
         #region Select
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6,T7, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6,T7, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, TResult>> expression);
@@ -1200,6 +1246,8 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> LeftJoin<T9>(ISugarQueryable<T9> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> InnerJoin<T9>(ISugarQueryable<T9> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> RightJoin<T9>(ISugarQueryable<T9> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> LeftJoinIF<T9>(bool isJoin, ISugarQueryable<T9> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> InnerJoinIF<T9>(bool isJoin, ISugarQueryable<T9> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8,T9> LeftJoin<T9>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> FullJoin<T9>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8,T9> InnerJoin<T9>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9, bool>> joinExpression);
@@ -1250,6 +1298,7 @@ namespace SqlSugar
         #endregion                              
 
         #region Select
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7,T8, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7,T8, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, TResult>> expression);
@@ -1349,6 +1398,8 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> LeftJoin<T10>(ISugarQueryable<T10> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> InnerJoin<T10>(ISugarQueryable<T10> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> RightJoin<T10>(ISugarQueryable<T10> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> LeftJoinIF<T10>(bool isJoin, ISugarQueryable<T10> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> InnerJoinIF<T10>(bool isJoin, ISugarQueryable<T10> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> LeftJoin<T10>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9,T10, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> FullJoin<T10>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> InnerJoin<T10>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, bool>> joinExpression);
@@ -1395,6 +1446,7 @@ namespace SqlSugar
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9, TResult>> expression, bool isAutoFill);
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9, TResult>> falseSelectExpression);
         #endregion
 
         #region OrderBy
@@ -1459,6 +1511,7 @@ namespace SqlSugar
         #endregion
 
         #region Other
+        new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8,T9> Distinct();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> Take(int num);
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> Clone();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9> AS<AsT>(string tableName);
@@ -1537,6 +1590,7 @@ namespace SqlSugar
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9,T10, TResult>> expression, bool isAutoFill);
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8,T9,T10, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9,T10, TResult>> falseSelectExpression);
         #endregion
 
         #region OrderBy
@@ -1606,6 +1660,7 @@ namespace SqlSugar
         #endregion
 
         #region Other
+        new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9,T10> Distinct();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9,T10> Take(int num);
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> Clone();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10> AS<AsT>(string tableName);
@@ -1634,6 +1689,8 @@ namespace SqlSugar
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> LeftJoin<T12>(ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> InnerJoin<T12>(ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> RightJoin<T12>(ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> LeftJoinIF<T12>(bool isJoin, ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression);
+        ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> InnerJoinIF<T12>(bool isJoin, ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12> LeftJoin<T12>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> FullJoin<T12>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression);
         ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12> InnerJoin<T12>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12, bool>> joinExpression);
@@ -1685,7 +1742,8 @@ namespace SqlSugar
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, TResult>> expression);
-        ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11, TResult>> expression, bool isAutoFill);
+        ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11, TResult>> expression, bool isAutoFill); 
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11, TResult>> falseSelectExpression);
         #endregion
 
         #region OrderBy
@@ -1746,6 +1804,7 @@ namespace SqlSugar
         #endregion
 
         #region Other
+        new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11> Distinct();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9,T10,T11> Take(int num);
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11> Clone();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11> AS<AsT>(string tableName);
@@ -1810,7 +1869,8 @@ namespace SqlSugar
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, TResult>> expression);
-        ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, TResult>> expression);
+        ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, TResult>> expression); 
+        ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11,T12, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11,T12, TResult>> falseSelectExpression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, TResult>> expression);
         ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, TResult>> expression);
@@ -1878,6 +1938,7 @@ namespace SqlSugar
         #endregion
 
         #region Other
+        new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12> Distinct();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> Take(int num);
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> Clone();
         new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> AS<AsT>(string tableName);

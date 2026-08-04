@@ -54,6 +54,10 @@ namespace SqlSugar
         }
         public override DbCommand GetCommand(string sql, SugarParameter[] parameters)
         {
+            if (sql == "-- No table ") 
+            {
+                sql = "select * from (select 1 as id) t where 1=2 ";
+            }
             SQLiteCommand sqlCommand = new SQLiteCommand(sql, (SQLiteConnection)this.Connection);
             sqlCommand.CommandType = this.CommandType;
             sqlCommand.CommandTimeout = this.CommandTimeOut;
@@ -103,9 +107,13 @@ namespace SqlSugar
                     this.OutputParameters.RemoveAll(it => it.ParameterName == sqlParameter.ParameterName);
                     this.OutputParameters.Add(sqlParameter);
                 }
-                if (sqlParameter.DbType == System.Data.DbType.Guid) {
+                if (sqlParameter.DbType == System.Data.DbType.Guid)
+                {
                     sqlParameter.DbType = System.Data.DbType.String;
-                    sqlParameter.Value = sqlParameter.Value.ObjToString();
+                    if (sqlParameter.Value != DBNull.Value)
+                    {
+                        sqlParameter.Value = sqlParameter.Value.ObjToString();
+                    }
                 }
                 if (isVarchar && sqlParameter.DbType == System.Data.DbType.String)
                 {

@@ -28,10 +28,11 @@ namespace TDengineTest
             db.CodeFirst.InitTables<TDHistoryValue>();
 
             //更多建表用例
-            db.CodeFirst.InitTables<CodeFirst03>();
-            db.Insertable(new CodeFirst03()
+            db.CodeFirst.InitTables<CodeFirst0311>();
+            db.Insertable(new CodeFirst0311()
             {
                 Ts = DateTime.Now,
+                DeviceType = 1,
                 Boolean = true,
                 Char = 'a',
                 Decimal = Convert.ToDecimal(18.2),
@@ -39,18 +40,18 @@ namespace TDengineTest
                 Int32 = 32,
                 Int64 = 64,
                 String = "string",
-                SByte=3,
+                SByte = 3,
                 Byte = 2,
                 Decimal2 = Convert.ToDecimal(18.3),
                 Double = Convert.ToDouble(18.44),
                 Float = Convert.ToSingle(18.45),
                 String2 = "2",
-                 UInt16=116,
-                  UInt32=332,
-                   UInt64=664
-            }).ExecuteCommand();
-            var dt = db.Ado.GetDataTable("select * from  CodeFirst03 ");
-            var list3 = db.Queryable<CodeFirst03>().ToList();
+                UInt16 = 116,
+                UInt32 = 332,
+                UInt64 = 664
+            }).SetTDengineChildTableName((stableName, it) => $"mytbname_{it.DeviceType}").ExecuteCommand();
+            var dt = db.Ado.GetDataTable("select * from  CodeFirst0311 ");
+            var list3 = db.Queryable<CodeFirst0311>().ToList();
         }
 
         private static void CodeFirst5(SqlSugarClient db)

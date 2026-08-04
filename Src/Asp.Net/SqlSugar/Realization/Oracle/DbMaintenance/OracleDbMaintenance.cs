@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.Common;
 using System.Linq;
-using System.Text;
+using System.Text; 
 
 namespace SqlSugar
 {
@@ -58,7 +58,7 @@ namespace SqlSugar
         {
             get
             {
-                return "select count(1) from user_ind_columns where upper(index_name)=upper('{0}')";
+                return "SELECT NVL2((SELECT INDEX_NAME FROM ALL_INDEXES WHERE INDEX_NAME=UPPER('{0}') AND OWNER = USER ),1,0)+NVL2((SELECT CONSTRAINT_NAME FROM ALL_CONSTRAINTS WHERE CONSTRAINT_NAME=UPPER('{0}') AND OWNER = USER),2,0) AS ROWCOUNT FROM DUAL";
             }
         }
         protected override string CreateIndexSql
@@ -271,7 +271,7 @@ namespace SqlSugar
         }
         #endregion
 
-        #region Methods
+        #region Methods 
         public override bool IsAnyTable(string tableName, bool isCache = true)
         {
             if (isCache)
@@ -344,11 +344,11 @@ WHERE table_name = '"+tableName+"'");
         public override List<string> GetIndexList(string tableName)
         {
             var sql = $"SELECT index_name FROM user_ind_columns\r\nWHERE upper(table_name) = upper('{tableName}')";
-            return this.Context.Ado.SqlQuery<string>(sql);
+            return this.Context.Ado.SqlQuery<string>(sql).Distinct().ToList();
         }
         public override List<string> GetProcList(string dbName)
         {
-            var sql = $"SELECT OBJECT_NAME FROM ALL_OBJECTS WHERE OBJECT_TYPE = 'PROCEDURE' AND OWNER = '{dbName.ToUpper()}'";
+            var sql = $"SELECT OBJECT_NAME FROM ALL_OBJECTS WHERE OBJECT_TYPE = 'PROCEDURE' AND  OWNER =user ";
             return this.Context.Ado.SqlQuery<string>(sql);
         }
         public override bool AddColumn(string tableName, DbColumnInfo columnInfo)
@@ -358,6 +358,7 @@ WHERE table_name = '"+tableName+"'");
                 columnInfo.DataType = "varchar2";
                 columnInfo.Length = 50;
             }
+            ConvertCreateColumnInfo(columnInfo);
             return base.AddColumn(tableName,columnInfo);
         }
         public override bool CreateIndex(string tableName, string[] columnNames, bool isUnique=false)
@@ -461,7 +462,7 @@ WHERE table_name = '"+tableName+"'");
         {
             List<DbColumnInfo> columns = GetOracleDbType(tableName);
             string sql = "select *  /* " + Guid.NewGuid() + " */ from " +SqlBuilder.GetTranslationTableName(SqlBuilder.GetNoTranslationColumnName(tableName)) + " WHERE 1=2 ";
-            if (!IsAnyTable(tableName, false))
+            if (!IsAnyTable(tableName, false)&&!GetViewInfoList(false).Any(it=>it.Name.EqualCase(tableName)))
             {
                 return new List<DbColumnInfo>();
             }
@@ -503,6 +504,10 @@ WHERE table_name = '"+tableName+"'");
                                 column.Length = 22;
                             }
                         }
+                        if (current.DefaultValue != null)
+                        {
+                            column.DefaultValue = current.DefaultValue.TrimEnd('\'').TrimStart('\''); 
+                        }
                     }
                     result.Add(column);
                 }
@@ -523,7 +528,8 @@ WHERE table_name = '"+tableName+"'");
                                  t1.char_length,   
                                  t1.data_precision,  
                                  t1.data_scale,     
-                                 t1.nullable,       
+                                 t1.nullable,  
+                                 t1.data_default as DefaultValue,
                                  t4.index_name,     
                                  t4.column_position,  
                                  t4.descend          
@@ -549,11 +555,11 @@ WHERE table_name = '"+tableName+"'");
 
         private List<string> GetPrimaryKeyByTableNames(string tableName)
         {
-            string cacheKey = "DbMaintenanceProvider.GetPrimaryKeyByTableNames." + this.SqlBuilder.GetNoTranslationColumnName(tableName).ToLower();
-            cacheKey = GetCacheKey(cacheKey);
-            return this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate(cacheKey,
-                    () =>
-                    {
+            //string cacheKey = "DbMaintenanceProvider.GetPrimaryKeyByTableNames." + this.SqlBuilder.GetNoTranslationColumnName(tableName).ToLower();
+            //cacheKey = GetCacheKey(cacheKey);
+            //return this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate(cacheKey,
+            //        () =>
+            //        {
                         var oldIsEnableLog = this.Context.Ado.IsEnableLogEvent;
                         this.Context.Ado.IsEnableLogEvent = false;
                         string sql = @" select distinct cu.COLUMN_name KEYNAME  from user_cons_columns cu, user_constraints au 
@@ -562,7 +568,7 @@ WHERE table_name = '"+tableName+"'");
                         var pks = this.Context.Ado.SqlQuery<string>(sql);
                         this.Context.Ado.IsEnableLogEvent = oldIsEnableLog;
                         return pks;
-                    });
+                    //});
         }
 
         public string GetTableComment(string tableName)
@@ -594,7 +600,7 @@ WHERE table_name = '"+tableName+"'");
                                this.Context.Ado.IsEnableLogEvent = oldIsEnableLog;
                                return pks;
                            });
-            return comments.HasValue() ? comments.First(it => it.DbColumnName.Equals(filedName, StringComparison.CurrentCultureIgnoreCase)).ColumnDescription : "";
+            return comments.HasValue() ? comments.FirstOrDefault(it => it.DbColumnName.EqualCase(filedName))?.ColumnDescription : "";
 
         }
 
@@ -646,6 +652,21 @@ WHERE table_name = '"+tableName+"'");
             }
             return true;
         }
+        public override bool IsAnyIndex(string indexName)
+        {
+            string sql = string.Format(this.IsAnyIndexSql, indexName);
+            return this.Context.Ado.GetInt(sql) == 1;
+        }
+        public override bool IsAnyConstraint(string constraintName)
+        {
+            string sql = string.Format(this.IsAnyIndexSql, constraintName);
+            int res = this.Context.Ado.GetInt(sql);
+            return res == 2 || res == 3;
+        }
+        public override bool DropIndex(string indexName, string tableName)
+        {
+            return DropIndex(indexName);
+        }
         #endregion
 
         #region Helper
@@ -665,15 +686,19 @@ WHERE table_name = '"+tableName+"'");
         }
         private static void ConvertCreateColumnInfo(DbColumnInfo x)
         {
-            string[] array = new string[] { "int"};
+            string[] array = new string[] { "int","date","clob","nclob"}; 
+            if (x.OracleDataType.HasValue())
+            {
+                x.DataType = x.OracleDataType;
+            }
             if (array.Contains(x.DataType?.ToLower()))
             {
                 x.Length = 0;
                 x.DecimalDigits = 0;
             }
-            if (x.OracleDataType.HasValue()) 
+            if(x.DecimalDigits>0&& x.DataType?.ToLower()?.IsIn("varchar", "clob", "varchar2", "nvarchar2", "nvarchar")==true)
             {
-                x.DataType = x.OracleDataType;
+                x.DecimalDigits = 0;
             }
         }
         #endregion

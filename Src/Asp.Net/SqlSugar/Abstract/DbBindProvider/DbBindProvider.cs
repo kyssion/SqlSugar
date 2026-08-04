@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -202,7 +203,7 @@ namespace SqlSugar
         {
             using (dataReader)
             {
-                if (type.Name.StartsWith("KeyValuePair"))
+                if (UtilMethods.IsKeyValuePairType(type))
                 {
                     return GetKeyValueList<T>(type, dataReader);
                 }
@@ -214,17 +215,23 @@ namespace SqlSugar
                 {
                     return GetArrayList<T>(type, dataReader);
                 }
+                else if (typeof(T)!=type&&typeof(T).IsInterface) 
+                {
+                    //这里是为了解决返回类型是接口的问题
+                    return GetEntityListByType<T>(type, Context, dataReader);
+                }
                 else
                 {
                     return GetEntityList<T>(Context, dataReader);
                 }
             }
         }
+
         public virtual async Task<List<T>> DataReaderToListAsync<T>(Type type, IDataReader dataReader)
         {
             using (dataReader)
             {
-                if (type.Name.StartsWith("KeyValuePair"))
+                if (UtilMethods.IsKeyValuePairType(type))
                 {
                     return await GetKeyValueListAsync<T>(type, dataReader);
                 }
@@ -236,6 +243,11 @@ namespace SqlSugar
                 {
                     return await GetArrayListAsync<T>(type, dataReader);
                 }
+                else if (typeof(T) != type && typeof(T).IsInterface)
+                {
+                    //这里是为了解决返回类型是接口的问题
+                    return await GetEntityListByTypeAsync<T>(type, Context, dataReader);
+                }
                 else
                 {
                     return await GetEntityListAsync<T>(Context, dataReader);
@@ -244,7 +256,7 @@ namespace SqlSugar
         }
         public virtual List<T> DataReaderToListNoUsing<T>(Type type, IDataReader dataReader)
         {
-            if (type.Name.StartsWith("KeyValuePair"))
+            if (UtilMethods.IsKeyValuePairType(type))
             {
                 return GetKeyValueList<T>(type, dataReader);
             }
@@ -263,7 +275,7 @@ namespace SqlSugar
         }
         public virtual Task<List<T>> DataReaderToListNoUsingAsync<T>(Type type, IDataReader dataReader)
         {
-            if (type.Name.StartsWith("KeyValuePair"))
+            if (UtilMethods.IsKeyValuePairType(type))
             {
                 return GetKeyValueListAsync<T>(type, dataReader);
             }
@@ -279,6 +291,37 @@ namespace SqlSugar
             {
                 return GetEntityListAsync<T>(Context, dataReader);
             }
+        }
+        public virtual List<T> GetEntityListByType<T>(Type entityType, SqlSugarProvider context, IDataReader dataReader)
+        {
+            var method = typeof(DbBindProvider).GetMethod("GetEntityList", BindingFlags.Instance | BindingFlags.NonPublic);
+            var genericMethod = method.MakeGenericMethod(entityType);
+            var objectValue=  genericMethod.Invoke(this, new object[] { context, dataReader });
+            List<T> result = new List<T>();
+            foreach (var item in objectValue as IEnumerable)
+            {
+                result.Add((T)item);
+            }
+            return result;
+        }
+        public virtual async Task<List<T>> GetEntityListByTypeAsync<T>(Type entityType, SqlSugarProvider context, IDataReader dataReader)
+        {
+            var method = typeof(DbBindProvider).GetMethod("GetEntityListAsync", BindingFlags.Instance | BindingFlags.NonPublic);
+            var genericMethod = method.MakeGenericMethod(entityType);
+            Task task  = (Task)genericMethod.Invoke(this, new object[] { context, dataReader }); 
+            return await GetTask<T>(task);
+        }
+        private static async Task<List<T>> GetTask<T>(Task task)
+        {
+            await task.ConfigureAwait(false); // 等待任务完成
+            var resultProperty = task.GetType().GetProperty("Result");
+            var value = resultProperty.GetValue(task);
+            List<T> result = new List<T>();
+            foreach (var item in value as IEnumerable)
+            {
+                result.Add((T)item);
+            }
+            return (List<T>)result;
         }
         #endregion
 
@@ -330,7 +373,7 @@ namespace SqlSugar
         {
             get
             {
-                return new List<string>() { "int32", "datetime", "decimal", "double", "byte" };
+                return new List<string>() { "int32", "datetime", "decimal", "double", "byte", "int64", "uint32", "uint64" };
             }
         }
         #endregion

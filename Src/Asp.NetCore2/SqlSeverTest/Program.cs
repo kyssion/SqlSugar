@@ -1,4 +1,4 @@
-﻿using SqlSugar;
+using SqlSugar;
 using System;
 
 namespace OrmTest
@@ -7,7 +7,7 @@ namespace OrmTest
     public class Program
     {
         static void Main(string[] args)
-        {
+        { 
             //Each example will automatically create a table and can run independently.
             //每个例子都会自动建表 并且可以独立运行   
             _1_CodeFirst.Init();
@@ -41,7 +41,7 @@ namespace OrmTest
         /// Database connection string
         /// 数据库连接字符串
         /// </summary>
-        public readonly static string Connection = "server=.;uid=sa;pwd=sasa;database=SqlSugar5Demo";
+        public readonly static string Connection = "server=.;uid=sa;pwd=sasa;database=SqlSugar5Demo;Encrypt=True;TrustServerCertificate=True";
 
         /// <summary>
         /// Get a new SqlSugarClient instance with specific configurations

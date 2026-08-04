@@ -277,7 +277,8 @@ namespace SqlSugar.TDengine
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             var parameter3 = model.Args[2];
-            return string.Format(" {1}+{2}{0} ", parameter3.MemberValue.ObjToString().ToLower().First(), parameter.MemberName, parameter2.MemberValue);
+            var result= string.Format(" {1}+{2}{0} ", parameter3.MemberValue.ObjToString().ToLower().First(), parameter.MemberName, parameter2.MemberValue);
+            return result.Replace("+-","-");
         }
 
 
@@ -315,7 +316,7 @@ namespace SqlSugar.TDengine
         public override string ToDouble(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
-            return string.Format(" CAST({0} AS DECIMAL(18,4))", parameter.MemberName);
+            return string.Format(" CAST({0} AS DOUBLE)", parameter.MemberName);
         }
 
         public override string ToBool(MethodCallExpressionModel model)
@@ -327,7 +328,7 @@ namespace SqlSugar.TDengine
         public override string ToDecimal(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
-            return string.Format(" CAST({0} AS DECIMAL(18,4))", parameter.MemberName);
+            return string.Format(" CAST({0} AS DOUBLE)", parameter.MemberName);
         }
 
         public override string Length(MethodCallExpressionModel model)

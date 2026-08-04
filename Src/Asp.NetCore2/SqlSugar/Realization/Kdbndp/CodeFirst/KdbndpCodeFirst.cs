@@ -54,6 +54,17 @@ namespace SqlSugar
             {
                 result.DataType = "datetime";
             }
+            if (IsSqlServerModel())
+            {
+                if (result.DataType.EqualCase("int4"))
+                {
+                    result.DataType = "int";
+                }
+                if (result.DataType.EqualCase("int8"))
+                {
+                    result.DataType = "bigint";
+                }
+            }
             return result;
         }
 
@@ -64,6 +75,11 @@ namespace SqlSugar
                 if (item.DataType == "DateTime")
                 {
                     item.Length = 0;
+                }
+                if (IsSqlServerModel()&&item.DataType == "bytea") 
+                {
+                    item.Length = 0;
+                    item.DataType = "varbinary(max)";
                 }
             }
         }
@@ -77,5 +93,9 @@ namespace SqlSugar
                 this.Context.DbMaintenance.AddPrimaryKey(tableName, item.DbColumnName);
         }
 
+        private bool IsSqlServerModel()
+        {
+            return this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
+        }
     }
 }

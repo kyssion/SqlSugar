@@ -8,6 +8,7 @@ namespace SqlSugar
     {
         public override string GetDbTypeName(string csharpTypeName)
         {
+            csharpTypeName = GetValidCsharpTypeName(csharpTypeName);
             if (csharpTypeName == UtilConstants.ByteArrayType.Name)
                 return "bytea";
             if (csharpTypeName.ToLower() == "int32")
@@ -19,16 +20,35 @@ namespace SqlSugar
             if (csharpTypeName.ToLower().IsIn("boolean", "bool"))
                 csharpTypeName = "bool";
             if (csharpTypeName == "DateTimeOffset")
-                csharpTypeName = "DateTime";
+                return "timestamptz";
             var mappings = this.MappingTypes.Where(it => it.Value.ToString().Equals(csharpTypeName, StringComparison.CurrentCultureIgnoreCase)).ToList();
             if (mappings != null && mappings.Count > 0)
                 return mappings.First().Key;
             else
                 return "varchar";
         }
+
+        private string GetValidCsharpTypeName(string csharpTypeName)
+        {
+            if (csharpTypeName?.StartsWith("ora") == true && this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.Vastbase)
+            {
+                csharpTypeName = csharpTypeName.Replace("ora", "");
+            }
+            else if (csharpTypeName?.StartsWith("mssql_") == true && this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.Vastbase)
+            {
+                csharpTypeName = csharpTypeName.Replace("mssql_", "");
+            }
+            else if (csharpTypeName?.StartsWith("sys.") == true)
+            {
+                csharpTypeName = csharpTypeName.Replace("sys.", "");
+            }
+            return csharpTypeName;
+        }
+
         public override string GetPropertyTypeName(string dbTypeName)
         {
             dbTypeName = dbTypeName.ToLower();
+            dbTypeName = GetValidCsharpTypeName(dbTypeName);
             var propertyTypes = MappingTypes.Where(it => it.Value.ToString().ToLower() == dbTypeName || it.Key.ToLower() == dbTypeName);
             if (propertyTypes == null)
             {
@@ -51,6 +71,10 @@ namespace SqlSugar
                 {
                     var dbTypeName2 = dbTypeName.TrimStart('_');
                     return MappingTypes.Where(it => it.Value.ToString().ToLower() == dbTypeName2  || it.Key.ToLower() == dbTypeName2).Select(it => it.Value + "[]").First();
+                }
+                else if (dbTypeName.EndsWith("geometry")|| dbTypeName.EndsWith("geography"))
+                {
+                    return CSharpDataType.@string.ToString();
                 }
                 Check.ThrowNotSupportedException(string.Format(" \"{0}\" Type NotSupported, DbBindProvider.GetPropertyTypeName error.", dbTypeName));
                 return null;
@@ -145,7 +169,17 @@ namespace SqlSugar
                     new KeyValuePair<string, CSharpDataType>("varbit",CSharpDataType.@byte),
                     new KeyValuePair<string, CSharpDataType>("time",CSharpDataType.TimeSpan),
                     new KeyValuePair<string, CSharpDataType>("public.geometry",CSharpDataType.@object),
-                    new KeyValuePair<string, CSharpDataType>("inet",CSharpDataType.@object)
+                    new KeyValuePair<string, CSharpDataType>("public.geography",CSharpDataType.@object),
+                    new KeyValuePair<string, CSharpDataType>("inet",CSharpDataType.@object),
+
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@int),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@float),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@short),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@byte),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@double),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@long),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@bool),
+                    new KeyValuePair<string, CSharpDataType>("number",CSharpDataType.@decimal),
                 };
         public override List<string> StringThrow
         {

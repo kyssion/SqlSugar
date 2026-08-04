@@ -16,6 +16,10 @@ namespace SqlSugar
     #region T2
     public partial class QueryableProvider<T, T2> : QueryableProvider<T>, ISugarQueryable<T, T2>
     {
+        public new ISugarQueryable<T, T2> IF(bool condition, Action<ISugarQueryable<T>> action) 
+        {
+            throw new Exception("Only Queryable<T>().IF is supported, and Queryable<T,T2,>().IF is not supported");
+        }
         public new ISugarQueryable<T,T2> Hints(string hints)
         {
             this.QueryBuilder.Hints = hints;
@@ -205,6 +209,49 @@ namespace SqlSugar
             result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
             return result;
         }
+
+
+        public ISugarQueryable<T, T2, T3> LeftJoinIF<T3>(bool isJoin,Expression<Func<T, T2, T3, bool>> joinExpression, string tableName)
+        {
+            var result = LeftJoin<T3>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3> FullJoinIF<T3>(bool isJoin,Expression<Func<T, T2, T3, bool>> joinExpression, string tableName)
+        {
+            var result = FullJoin<T3>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3> InnerJoinIF<T3>(bool isJoin,Expression<Func<T, T2, T3, bool>> joinExpression, string tableName)
+        {
+            var result = InnerJoin<T3>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3> RightJoinIF<T3>(bool isJoin,Expression<Func<T, T2, T3, bool>> joinExpression, string tableName)
+        {
+            var result = RightJoin<T3>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+
         public ISugarQueryable<T, T2, T3> InnerJoin<T3>(Expression<Func<T, T2, T3, bool>> joinExpression)
         {
             this.Context.InitMappingInfo<T3>();
@@ -301,6 +348,13 @@ namespace SqlSugar
             }
             return _Select<TResult>(expression);
         }
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T,T2, TResult>> trueSelectExpression, Expression<Func<T,T2, TResult>> falseSelectExpression)
+        {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
+        }
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T,T2, TResult>> expression, bool isAutoFill)
         {
             var clone = this.Select(expression).Clone();
@@ -309,6 +363,8 @@ namespace SqlSugar
             {
                 sql = " ";
             }
+            UtilMethods.UpdateQueryBuilderByClone(this.QueryBuilder, clone);
+            this.QueryBuilder.SelectNewIgnoreColumns = clone.QueryBuilder.SelectNewIgnoreColumns;
             this.QueryBuilder.SubToListParameters = clone.QueryBuilder.SubToListParameters;
             this.QueryBuilder.Parameters = clone.QueryBuilder.Parameters;
             this.QueryBuilder.LambdaExpressions.ParameterIndex = clone.QueryBuilder.LambdaExpressions.ParameterIndex;
@@ -695,6 +751,10 @@ namespace SqlSugar
     #region T3
     public partial class QueryableProvider<T, T2, T3> : QueryableProvider<T>, ISugarQueryable<T, T2, T3>
     {
+        public new ISugarQueryable<T, T2,T3> IF(bool condition, Action<ISugarQueryable<T>> action)
+        {
+            throw new Exception("Only Queryable<T>().IF is supported, and Queryable<T,T2,>().IF is not supported");
+        }
         public new ISugarQueryable<T, T2,T3> Hints(string hints)
         {
             this.QueryBuilder.Hints = hints;
@@ -894,6 +954,47 @@ namespace SqlSugar
             result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
             return result;
 
+        }
+
+        public ISugarQueryable<T, T2, T3,T4> LeftJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3,T4, bool>> joinExpression, string tableName)
+        {
+            var result = LeftJoin<T4>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3,T4> FullJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3, T4, bool>> joinExpression, string tableName)
+        {
+            var result = FullJoin<T4>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3, T4> InnerJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3, T4, bool>> joinExpression, string tableName)
+        {
+            var result = InnerJoin<T4>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3, T4> RightJoinIF<T4>(bool isJoin, Expression<Func<T, T2, T3, T4, bool>> joinExpression, string tableName)
+        {
+            var result = RightJoin<T4>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
         }
 
 
@@ -1097,6 +1198,8 @@ namespace SqlSugar
                 sql = " ";
             }
             this.QueryBuilder.Parameters = clone.QueryBuilder.Parameters;
+            UtilMethods.UpdateQueryBuilderByClone(this.QueryBuilder,clone);
+            this.QueryBuilder.SelectNewIgnoreColumns = clone.QueryBuilder.SelectNewIgnoreColumns;
             this.QueryBuilder.SubToListParameters = clone.QueryBuilder.SubToListParameters;
             this.QueryBuilder.LambdaExpressions.ParameterIndex = clone.QueryBuilder.LambdaExpressions.ParameterIndex;
             var parameters = (expression as LambdaExpression).Parameters;
@@ -1109,6 +1212,15 @@ namespace SqlSugar
                 sql = sql.TrimStart(' ').TrimStart(',');
             }
             return this.Select<TResult>(sql);
+        }
+
+
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2,T3, TResult>> trueSelectExpression, Expression<Func<T, T2,T3, TResult>> falseSelectExpression)
+        {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
         }
 
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, TResult>> expression)
@@ -1480,6 +1592,10 @@ namespace SqlSugar
     #region T4
     public partial class QueryableProvider<T, T2, T3, T4> : QueryableProvider<T>, ISugarQueryable<T, T2, T3, T4>
     {
+        public new ISugarQueryable<T, T2,T3,T4> IF(bool condition, Action<ISugarQueryable<T>> action)
+        {
+            throw new Exception("Only Queryable<T>().IF is supported, and Queryable<T,T2,>().IF is not supported");
+        }
         public new ISugarQueryable<T, T2, T3,T4> Hints(string hints)
         {
             this.QueryBuilder.Hints = hints;
@@ -1661,7 +1777,46 @@ namespace SqlSugar
             result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
             return result;
         }
-
+        public ISugarQueryable<T, T2, T3, T4, T5> LeftJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName)
+        {
+            var result = LeftJoin<T5>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3, T4, T5> FullJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName)
+        {
+            var result = FullJoin<T5>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3, T4, T5> InnerJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName)
+        {
+            var result = InnerJoin<T5>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3, T4,T5> RightJoinIF<T5>(bool isJoin, Expression<Func<T, T2, T3, T4, T5, bool>> joinExpression, string tableName)
+        {
+            var result = RightJoin<T5>(joinExpression);
+            result.QueryBuilder.JoinQueryInfos.Last().TableName = tableName;
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
 
         #region Where
         public new ISugarQueryable<T, T2, T3,T4> Where(string expShortName, FormattableString expressionString)
@@ -1777,7 +1932,9 @@ namespace SqlSugar
             {
                 sql = " ";
             }
+            UtilMethods.UpdateQueryBuilderByClone(this.QueryBuilder, clone);
             this.QueryBuilder.Parameters = clone.QueryBuilder.Parameters;
+            this.QueryBuilder.SelectNewIgnoreColumns = clone.QueryBuilder.SelectNewIgnoreColumns;
             this.QueryBuilder.SubToListParameters = clone.QueryBuilder.SubToListParameters;
             this.QueryBuilder.LambdaExpressions.ParameterIndex=clone.QueryBuilder.LambdaExpressions.ParameterIndex; 
             var parameters = (expression as LambdaExpression).Parameters;
@@ -1808,6 +1965,14 @@ namespace SqlSugar
                 SetAppendNavColumns(expression);
             }
             return _Select<TResult>(expression);
+        }
+
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3,T4, TResult>> trueSelectExpression, Expression<Func<T, T2, T3,T4, TResult>> falseSelectExpression)
+        {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
         }
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, TResult>> expression)
         {
@@ -2286,6 +2451,10 @@ namespace SqlSugar
     #region T5   
     public partial class QueryableProvider<T, T2, T3, T4, T5> : QueryableProvider<T>, ISugarQueryable<T, T2, T3, T4, T5>
     {
+        public new ISugarQueryable<T, T2,T3,T4,T5> IF(bool condition, Action<ISugarQueryable<T>> action)
+        {
+            throw new Exception("Only Queryable<T>().IF is supported, and Queryable<T,T2,>().IF is not supported");
+        }
         public new ISugarQueryable<T, T2, T3, T4,T5> Hints(string hints)
         {
             this.QueryBuilder.Hints = hints;
@@ -2600,7 +2769,9 @@ namespace SqlSugar
             {
                 sql = " ";
             }
+            UtilMethods.UpdateQueryBuilderByClone(this.QueryBuilder, clone);
             this.QueryBuilder.Parameters = clone.QueryBuilder.Parameters;
+            this.QueryBuilder.SelectNewIgnoreColumns = clone.QueryBuilder.SelectNewIgnoreColumns;
             this.QueryBuilder.SubToListParameters = clone.QueryBuilder.SubToListParameters;
             this.QueryBuilder.LambdaExpressions.ParameterIndex = clone.QueryBuilder.LambdaExpressions.ParameterIndex;
             var parameters = (expression as LambdaExpression).Parameters;
@@ -2617,6 +2788,13 @@ namespace SqlSugar
             return this.Select<TResult>(sql);
         }
 
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4,T5, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4,T5, TResult>> falseSelectExpression)
+        {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
+        }
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, TResult>> expression)
         {
             if (IsAppendNavColumns())

@@ -1,11 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
+using System.Threading.Tasks; 
 
 namespace SqlSugar
 {
@@ -98,6 +99,10 @@ namespace SqlSugar
         }
         private bool UpdateObjectNotWhere()
         {
+            if (this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer) 
+            {
+                return false;
+            }
             return this.Context.CurrentConnectionConfig.DbType != DbType.MySql
                 && this.Context.CurrentConnectionConfig.DbType != DbType.MySqlConnector
                 && this.Context.CurrentConnectionConfig.DbType != DbType.SqlServer;
@@ -294,6 +299,10 @@ namespace SqlSugar
 
         private void DataChangesAop(T [] items)
         {
+            if (typeof(T).FullName.StartsWith("System.Collections.Generic.Dictionary`"))
+            {
+                return;
+            }
             var dataEvent = this.Context.CurrentConnectionConfig.AopEvents?.DataChangesExecuted;
             if (dataEvent != null)
             {
@@ -384,8 +393,13 @@ namespace SqlSugar
                     TableId = i,
                     UpdateSql = column.UpdateSql,
                     UpdateServerTime = column.UpdateServerTime,
-                    IsPrimarykey=column.IsPrimarykey
+                    IsPrimarykey=column.IsPrimarykey,
+                    DataType=column.DataType
                 };
+                if (column.ForOwnsOnePropertyInfo != null)
+                {
+                    columnInfo.DbColumnName = column.DbColumnName;
+                }
                 if (columnInfo.PropertyType.IsEnum() && columnInfo.Value != null)
                 {
                     if (this.Context.CurrentConnectionConfig.MoreSettings?.TableEnumIsString == true)
@@ -401,7 +415,12 @@ namespace SqlSugar
                 if (column.IsJson)
                 {
                     columnInfo.IsJson = true;
-                    if (columnInfo.Value != null)
+                    var insertBuilder = InstanceFactory.GetInsertBuilder(this.Context?.CurrentConnectionConfig);
+                    if (insertBuilder?.SerializeObjectFunc != null&& columnInfo.Value != null) 
+                    {
+                        columnInfo.Value = insertBuilder?.SerializeObjectFunc(columnInfo.Value);
+                    }
+                    else if (columnInfo.Value != null)
                         columnInfo.Value = this.Context.Utilities.SerializeObject(columnInfo.Value);
                 }
                 if (column.IsArray)
@@ -423,6 +442,8 @@ namespace SqlSugar
             if (column.ForOwnsOnePropertyInfo != null)
             {
                 var owsPropertyValue = column.ForOwnsOnePropertyInfo.GetValue(item, null);
+                if (owsPropertyValue == null)
+                    return null;
                 return column.PropertyInfo.GetValue(owsPropertyValue, null);
             }
             else
@@ -493,12 +514,16 @@ namespace SqlSugar
                     if (item.SqlParameterDbType is Type)
                     {
                         continue;
-                    }
+                    } 
                     var parameter = new SugarParameter(this.SqlBuilder.SqlParameterKeyWord + item.DbColumnName, item.Value, item.PropertyType);
                     if (item.IsJson)
                     {
                         parameter.IsJson = true;
                         SqlBuilder.ChangeJsonType(parameter);
+                    }
+                    if (item.SqlParameterDbType is System.Data.DbType dbtype)
+                    {
+                        parameter.DbType = dbtype;
                     }
                     if (item.IsArray)
                     {
@@ -602,7 +627,7 @@ namespace SqlSugar
                 return mappInfo == null ? propertyName : mappInfo.DbColumnName;
             }
         }
-        private List<string> GetPrimaryKeys()
+        protected List<string> GetPrimaryKeys()
         {
             if (this.WhereColumnList.HasValue())
             {
@@ -869,16 +894,20 @@ namespace SqlSugar
         {
             return UtilMethods.CountSubstringOccurrences(sql,"WHERE")>1;
         }
+        protected bool IsCorrectErrorSqlParameterName()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.IsCorrectErrorSqlParameterName == true;
+        }
 
-        private void ThrowUpdateByExpression()
+        protected void ThrowUpdateByExpression()
         {
             Check.Exception(UpdateParameterIsNull == true, ErrorMessage.GetThrowMessage(" no support UpdateColumns and WhereColumns", "根据表达式更新 db.Updateable<T>() 禁止使用 UpdateColumns和WhereColumns,你可以使用 SetColumns Where 等。更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新， 具体用法请查看文档 "));
         }
-        private void ThrowUpdateByObject()
+        protected void ThrowUpdateByObject()
         {
             Check.Exception(UpdateParameterIsNull == false, ErrorMessage.GetThrowMessage(" no support SetColumns and Where", "根据对像更新 db.Updateabe(对象) 禁止使用 SetColumns和Where ,你可以使用WhereColumns 和  UpdateColumns。 更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新 ， 具体用法请查看文档 "));
         }
-        private void ThrowUpdateByExpressionByMesage(string message)
+        protected void ThrowUpdateByExpressionByMesage(string message)
         {
             Check.Exception(UpdateParameterIsNull == true, ErrorMessage.GetThrowMessage(" no support "+ message, "根据表达式更新 db.Updateable<T>()禁止使用 " + message+"。 更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新 ， 具体用法请查看文档 "));
         }

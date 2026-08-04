@@ -42,6 +42,10 @@ namespace SqlSugar.GBase
             get
             {
                 var result = Builder.GetTranslationTableName(EntityInfo.EntityName);
+                if (this.AsName.HasValue())
+                {
+                    result = Builder.GetTranslationTableName(this.AsName);
+                }
                 result += UtilConstants.Space;
                 if (this.TableWithString.HasValue())
                 {
@@ -174,7 +178,11 @@ namespace SqlSugar.GBase
                 }
                 else if (type == UtilConstants.BoolType)
                 {
-                    return string.Format("CAST({0} AS boolean)", value.ObjToBool()?1:0) ;
+                    if (GBaseConfig.IsMySqlMode(this.Context))
+                    {
+                        return string.Format("CAST({0} AS signed)", value.ObjToBool() ? 1 : 0);
+                    }
+                    return string.Format("CAST({0} AS boolean)", value.ObjToBool() ? 1 : 0);
                 }
                 else if (type == UtilConstants.IntType || 
                     type == UtilConstants.LongType ||
@@ -186,7 +194,7 @@ namespace SqlSugar.GBase
                 }
                 else
                 {
-                    return n + "'" + value + "'";
+                    return n + "'" + value?.ToString()?.ToSqlFilter() + "'";
                 }
             }
         }

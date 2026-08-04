@@ -34,7 +34,7 @@ namespace SqlSugar.Xugu
 	CASE WHEN I.IS_PRIMARY THEN TRUE ELSE FALSE END `ISPRIMARYKEY`
 FROM USER_COLUMNS C
 LEFT JOIN USER_TABLES T ON T.TABLE_ID=C.TABLE_ID
-LEFT JOIN USER_INDEXES I ON T.TABLE_ID=I.TABLE_ID AND I.KEYS LIKE '%""'+C.COL_NAME+'""%'
+LEFT JOIN USER_INDEXES I ON T.TABLE_ID=I.TABLE_ID AND I.KEYS LIKE  '%'|| C.COL_NAME || '%' 
 WHERE T.TABLE_NAME='{0}' AND T.DB_ID=CURRENT_DB_ID
 	AND T.USER_ID=CURRENT_USERID AND T.SCHEMA_ID=CURRENT_SCHEMAID
 ORDER BY C.COL_NO";//FIND_IN_SET('""'+C.COL_NAME+'""',I.KEYS)>0
@@ -111,7 +111,7 @@ WHERE T.TABLE_NAME='{0}' AND T.DB_ID=CURRENT_DB_ID
 
         protected override string CreateIndexSql=> "CREATE {3} INDEX IX_{0}_{2} ON {0}({1})";//NONCLUSTERED
         protected override string AddDefaultValueSql=> "ALTER TABLE {0} ALTER COLUMN {1} SET DEFAULT '{2}'";
-        protected override string IsAnyIndexSql => "SELECT COUNT(*) FROM USER_INDEXES WHERE INDEX_NAME='{0}'";
+        protected override string IsAnyIndexSql => "SELECT COUNT(*) FROM USER_INDEXES WHERE INDEX_NAME=UPPER('{0}')";
         #endregion
 
         #region Check
@@ -144,6 +144,10 @@ WHERE T.TABLE_NAME='{0}' AND T.DB_ID=CURRENT_DB_ID
         //                });
         //}
 
+        public override bool AddTableRemark(string tableName, string description)
+        {
+            return base.AddTableRemark(SqlBuilder.GetTranslationColumnName(tableName), description);
+        }
         private List<DbColumnInfo> GetColumnInfosByTableName(string tableName)
         {
             string sql = "select *  /* " + Guid.NewGuid() + " */ from " + SqlBuilder.GetTranslationTableName(tableName) + " WHERE 1=2 ";
@@ -211,7 +215,14 @@ WHERE T.TABLE_NAME='{0}' AND T.DB_ID=CURRENT_DB_ID
             return tableString;
         }
 
-
+        public override bool DeleteColumnRemark(string columnName, string tableName)
+        {
+            return base.DeleteColumnRemark(this.SqlBuilder.GetTranslationColumnName(columnName), this.SqlBuilder.GetTranslationColumnName(tableName));
+        }
+        public override bool AddColumnRemark(string columnName, string tableName, string description)
+        {
+            return base.AddColumnRemark(this.SqlBuilder.GetTranslationColumnName(columnName), this.SqlBuilder.GetTranslationColumnName(tableName), description);
+        }
         public override bool AddDefaultValue(string tableName, string columnName, string defaultValue)
         {
             if (defaultValue == "''")

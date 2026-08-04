@@ -26,5 +26,14 @@ namespace SqlSugar
         {
             return " ( " + sql + " )  ";
         }
+
+        public override string RemoveParentheses(string sql)
+        {
+            if (sql.Contains(" ORDER BY")&&sql.StartsWith("(")&&sql.EndsWith(")") &&!sql.ToLower().Contains("limit")) 
+            {
+                sql = $" {sql.TrimEnd(')')} limit 0,{int.MaxValue}) ";
+            }
+            return sql;
+        }
     }
 }

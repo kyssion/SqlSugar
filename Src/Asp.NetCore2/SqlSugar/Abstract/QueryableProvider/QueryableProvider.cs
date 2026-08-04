@@ -8,7 +8,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Reflection;
 using System.Dynamic;
-using System.Threading.Tasks; 
+using System.Threading.Tasks;
+using Newtonsoft.Json.Converters;
 
 namespace SqlSugar
 {
@@ -211,19 +212,37 @@ namespace SqlSugar
         }
         public ISugarQueryable<T, T2> LeftJoinIF<T2>(bool isLeftJoin, Expression<Func<T, T2, bool>> joinExpression) 
         {
+            var oldAsName = this.QueryBuilder.AsTables?.ToDictionary(it=>it.Key,it=>it.Value); 
             var result = LeftJoin(joinExpression);
             if (isLeftJoin == false)
             {
                 result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+                if (oldAsName?.Any() == false && result.QueryBuilder.AsTables?.Any() == true)
+                {
+                    //no things
+                }
+                else
+                {
+                    result.QueryBuilder.AsTables = oldAsName;
+                }
             }
             return result;
         }
         public ISugarQueryable<T, T2> InnerJoinIF<T2>(bool isJoin, Expression<Func<T, T2, bool>> joinExpression)
         {
+            var oldAsName = this.QueryBuilder.AsTables?.ToDictionary(it => it.Key, it => it.Value);
             var result = InnerJoin(joinExpression);
             if (isJoin == false)
             {
                 result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+                if (oldAsName?.Any() == false && result.QueryBuilder.AsTables?.Any() == true)
+                {
+                    //no things
+                }
+                else
+                {
+                    result.QueryBuilder.AsTables = oldAsName;
+                }
             }
             return result;
         }
@@ -329,7 +348,7 @@ namespace SqlSugar
         }
         public ISugarQueryable<T> Clone()
         {
-            var queryable = this.Context.Queryable<object>().Select<T>().WithCacheIF(IsCache, CacheTime);
+            var queryable = this.Context.Queryable<object>().AsType(this.QueryBuilder.AsType).Select<T>().WithCacheIF(IsCache, CacheTime);
             CopyQueryBuilder(queryable.QueryBuilder);
             ((QueryableProvider<T>)queryable).CacheKey = this.CacheKey;
             ((QueryableProvider<T>)queryable).MapperAction = this.MapperAction;
@@ -353,14 +372,31 @@ namespace SqlSugar
             var entityName = typeof(T).Name;
             return _As(tableName, entityName);
         }
+
+        public ISugarQueryable<T> IF(bool condition, Action<ISugarQueryable<T>> action) 
+        {
+            if(condition)
+              action(this);
+            return this;
+         }
         public ISugarQueryable<T> AsWithAttr() 
         {
             var asName=GetTableName(this.EntityInfo, this.EntityInfo.DbTableName);
             this.QueryBuilder.IsCrossQueryWithAttr = true;
             return this.AS(asName);
         }
+        public ISugarQueryable<Type> Cast<Type>() 
+        {
+            var selectValue = this.Clone().QueryBuilder.GetSelectValue;
+            return this.Select<Type>().Select(selectValue);
+        }
         public ISugarQueryable<T> AsType(Type tableNameType)
         {
+            if (tableNameType == null)
+            {
+                return this;
+            }
+            this.QueryBuilder.AsType = tableNameType;
             return AS(this.Context.EntityMaintenance.GetEntityInfo(tableNameType).DbTableName);
         }
         public virtual ISugarQueryable<T> With(string withString)
@@ -639,17 +675,17 @@ namespace SqlSugar
         /// </summary>
         /// <param name="whereClass"></param>
         /// <returns></returns>
-        public ISugarQueryable<T> WhereClass<ClassType>(ClassType whereClass, bool ignoreDefaultValue = false) where ClassType : class, new()
+        public virtual ISugarQueryable<T> WhereClass<ClassType>(ClassType whereClass, bool ignoreDefaultValue = false) where ClassType : class, new()
         {
             return WhereClass(new List<ClassType>() { whereClass }, ignoreDefaultValue);
         }
-        public ISugarQueryable<T> WhereClassByPrimaryKey(List<T> list)
+        public virtual ISugarQueryable<T> WhereClassByPrimaryKey(List<T> list)
         {
             _WhereClassByPrimaryKey(list);
             return this;
         }
 
-        public ISugarQueryable<T> WhereClassByWhereColumns(List<T> list, string[] whereColumns) 
+        public virtual ISugarQueryable<T> WhereClassByWhereColumns(List<T> list, string[] whereColumns) 
         {
             _WhereClassByWhereColumns(list,whereColumns);
             return this;
@@ -779,8 +815,15 @@ namespace SqlSugar
                         });
                         if (value is Enum && this.Context.CurrentConnectionConfig?.MoreSettings?.TableEnumIsString != true)
                         {
-                            data.Value.FieldValue = Convert.ToInt64(value).ObjToString();
-                            data.Value.CSharpTypeName = "int";
+                            if (column.SqlParameterDbType is Type type&&type?.Name== "EnumToStringConvert")
+                            {
+                                data.Value.CSharpTypeName = "string";
+                            }
+                            else
+                            {
+                                data.Value.FieldValue = Convert.ToInt64(value).ObjToString();
+                                data.Value.CSharpTypeName = "int";
+                            }
                         }
                         else if (value != null&&column.UnderType==UtilConstants.DateType) 
                         {
@@ -1325,6 +1368,12 @@ namespace SqlSugar
             this._OrderBy(expression, type);
             return this;
         }
+        public virtual ISugarQueryable<T> OrderBy(string expShortName, FormattableString expOrderBy, OrderByType type = OrderByType.Asc) 
+        {
+            var exp = DynamicCoreHelper.GetMember(typeof(T), typeof(object), expShortName, expOrderBy);
+            this._OrderBy(exp, type);
+            return this;
+        }
         public virtual ISugarQueryable<T> OrderByDescending(Expression<Func<T, object>> expression)
         {
             this._OrderBy(expression, OrderByType.Desc);
@@ -1438,6 +1487,39 @@ namespace SqlSugar
         {
             return Select<T>(expShortName, expSelect, resultType);
         }
+        public DynamicCoreSelectModel Select(string expShortName, List<string> columns,params object[] args)
+        {
+            DynamicCoreSelectModel dynamicCoreSelectModel = new DynamicCoreSelectModel();
+            if (!string.IsNullOrEmpty(this.QueryBuilder.TableShortName)&&expShortName!= this.QueryBuilder.TableShortName) 
+            {
+                if (columns.Any(it => it .Contains( expShortName + " ")))
+                {
+                    var pattern = $@"\b{Regex.Escape(expShortName)}\s*\."; // 匹配 expShortName 后面跟任意空格和点
+                    var replacement = this.QueryBuilder.TableShortName + ".";
+
+                    columns = columns.Select(it => Regex.Replace(it, pattern, replacement)).ToList();
+                    expShortName = this.QueryBuilder.TableShortName;
+                }
+                else
+                {
+                    columns = columns.Select(it => it.Replace(expShortName + ".", this.QueryBuilder.TableShortName + ".")).ToList();
+                    expShortName = this.QueryBuilder.TableShortName;
+                }
+            }
+            var selectObj = DynamicCoreHelper.BuildPropertySelector(
+              expShortName, typeof(T),
+              columns,
+               args);
+            if (IsAppendNavColumns())
+            {
+                SetAppendNavColumns(selectObj.Exp);
+            }
+            var exp = selectObj.Exp;
+            var method = GetType().GetMethod("_Select", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+             .MakeGenericMethod(selectObj.ResultNewType);
+             dynamicCoreSelectModel.Value= method.Invoke(this, new object[] { exp });
+            return dynamicCoreSelectModel;
+        }
         public virtual ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, TResult>> expression)
         {
             if (IsAppendNavColumns())
@@ -1446,6 +1528,12 @@ namespace SqlSugar
             }
             return _Select<TResult>(expression);
         }
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, TResult>> trueSelectExpression, Expression<Func<T, TResult>> falseSelectExpression) {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
+        }
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, TResult>> expression, bool isAutoFill)
         {
             if (typeof(TResult).IsAnonymousType()) 
@@ -1453,6 +1541,7 @@ namespace SqlSugar
                 return Select(expression);
             }
             var clone = this.Select(expression).Clone();
+            clone.QueryBuilder.IsDistinct = false;
             //clone.QueryBuilder.LambdaExpressions.Index = QueryBuilder.LambdaExpressions.Index+1;
             var ps = clone.QueryBuilder;
             var sql = ps.GetSelectValue;
@@ -1494,17 +1583,43 @@ namespace SqlSugar
             }
             else if (this.QueryBuilder.EntityType == UtilConstants.ObjType || (this.QueryBuilder.AsTables != null && this.QueryBuilder.AsTables.Count == 1)||this.QueryBuilder.EntityName!=this.QueryBuilder.EntityType.Name) 
             {
+                if (typeof(TResult).IsInterface&&this.QueryBuilder.AsType==null) 
+                {
+                    Check.ExceptionEasy("Select< interface > requires a full example of AsType(type) db.Queryable<object>().AsType(type).Select<Interface>().ToList()"
+                        , "Select<接口>需要AsType(type)完整示例db.Queryable<object>().AsType(type).Select<Interface>().ToList()");
+                }
                 if (this.QueryBuilder.SelectValue.HasValue()&& this.QueryBuilder.SelectValue.ObjToString().Contains("AS"))
                 {
                     return this.Select<TResult>(this.QueryBuilder.SelectValue+"");
                 }
                 else
                 {
-                    return this.Select<TResult>(this.SqlBuilder.SqlSelectAll);
+                    if (this.QueryBuilder.IsSingle()&&this.EntityInfo?.Type?.GetCustomAttribute<SplitTableAttribute>() != null&& this.QueryBuilder?.SelectValue?.ToString()=="*")
+                    {
+                        var columnAarray = this.Context.EntityMaintenance.GetEntityInfo<T>().Columns;
+                        var sql = string.Empty;
+                        var columns= columnAarray.Where(it => typeof(TResult).GetProperties().Any(s => s.Name.EqualCase(it.PropertyName))).Where(it => it.IsIgnore == false).ToList();
+                        if (columns.Any())
+                        {
+                            sql = string.Join(",", columns.Select(it => $"{SqlBuilder.GetTranslationColumnName(it.DbColumnName)} AS  {SqlBuilder.GetTranslationColumnName(it.PropertyName)} "));
+                        }
+                        return this.Select<TResult>(sql);
+                    }
+                    else
+                    {
+                        return this.Select<TResult>(this.SqlBuilder.SqlSelectAll);
+                    }
                 }
             }
             else
             {
+                if (typeof(TResult).IsInterface&& typeof(TResult).IsAssignableFrom(this.EntityInfo.Type))
+                {
+                    if (!this.QueryBuilder.AsTables.Any())
+                    {
+                        this.AsType(this.EntityInfo.Type);
+                    }
+                }
                 var selects = this.QueryBuilder.GetSelectValueByString();
                 if (selects.ObjToString().ToLower().IsContainsIn(".","("," as ")) 
                 {
@@ -1687,6 +1802,9 @@ namespace SqlSugar
                 //}
                 var unionall = this.Context._UnionAll(tableQueryables.ToArray());
                 unionall.QueryBuilder.Includes = this.QueryBuilder.Includes;
+                unionall.QueryBuilder.EntityType = typeof(T);
+                unionall.QueryBuilder.IsDisableMasterSlaveSeparation = this.QueryBuilder.IsDisableMasterSlaveSeparation;
+                unionall.QueryBuilder.IsDisabledGobalFilter = this.QueryBuilder.IsDisabledGobalFilter;
                 if (unionall.QueryBuilder.Includes?.Any()==true) 
                 {
                     unionall.QueryBuilder.NoCheckInclude = true;

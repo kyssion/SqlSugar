@@ -11,6 +11,7 @@ namespace SqlSugar
 {
     public interface IDbMethods
     {
+        ISqlSugarClient sqlSugarClient { get; set; }
         string IIF(MethodCallExpressionModel model);
         string HasNumber(MethodCallExpressionModel model);
         string HasValue(MethodCallExpressionModel model);
@@ -54,6 +55,8 @@ namespace SqlSugar
         string AggregateMax(MethodCallExpressionModel model);
         string AggregateCount(MethodCallExpressionModel model);
         string AggregateDistinctCount(MethodCallExpressionModel model);
+        string AggregateDistinctSum(MethodCallExpressionModel model);
+        string AggregateDistinctAvg(MethodCallExpressionModel model);
         string MappingColumn(MethodCallExpressionModel model);
         string IsNull(MethodCallExpressionModel model);
         string GetSelfAndAutoFill(string shortName,bool isSingle);
@@ -128,5 +131,8 @@ namespace SqlSugar
         string NewUid(MethodCallExpressionModel mode);
         string FullTextContains(MethodCallExpressionModel mode);
         string PgsqlArrayContains(MethodCallExpressionModel model);
+        string SelectFields(MethodCallExpressionModel model);
+        string Coalesce(MethodCallExpressionModel model);
+        string UNIX_TIMESTAMP(MethodCallExpressionModel model);
     }
 }

@@ -8,6 +8,7 @@ using System.Dynamic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -262,7 +263,30 @@ namespace SqlSugar
             using (reader)
             {
                 var tType = typeof(T);
-                var classProperties = tType.GetProperties().ToList();
+                var classProperties = tType.GetProperties()
+                    .Where(p => p.GetIndexParameters().Length == 0).ToList();  
+                if(this.QueryBuilder is QueryBuilder q) 
+                {
+                    if (q.IsAnyParameterExpression) 
+                    {
+                        if (q.SelectValue is LambdaExpression lambda) 
+                        {
+                            if (lambda.Body is MemberInitExpression memberInit) 
+                            {
+                                // 获取memberInit中定义的属性名称
+                                var memberNames = memberInit.Bindings
+                                    .OfType<MemberAssignment>()
+                                    .Select(b => b.Member.Name)
+                                    .ToList();
+
+                                // 过滤掉不在memberInit中的属性
+                                classProperties = classProperties
+                                    .Where(p => memberNames.Contains(p.Name))
+                                    .ToList();
+                            }
+                        }
+                    }
+                }
                 var reval = new List<T>();
                 if (reader != null && !reader.IsClosed)
                 {
@@ -331,7 +355,8 @@ namespace SqlSugar
         public List<T> DataReaderToListNoUsing<T>(IDataReader reader)
         {
             var tType = typeof(T);
-            var classProperties = tType.GetProperties().ToList();
+            var classProperties = tType.GetProperties()
+                 .Where(p => p.GetIndexParameters().Length == 0).ToList();
             var reval = new List<T>();
             if (reader != null && !reader.IsClosed)
             {
@@ -356,7 +381,7 @@ namespace SqlSugar
             using (reader)
             {
                 var tType = typeof(T);
-                var classProperties = tType.GetProperties().ToList();
+                var classProperties = tType.GetProperties().Where(p => p.GetIndexParameters().Length == 0).ToList();
                 var reval = new List<T>();
                 if (reader != null && !reader.IsClosed)
                 {
@@ -423,7 +448,7 @@ namespace SqlSugar
         public async Task<List<T>> DataReaderToListAsyncNoUsing<T>(IDataReader reader)
         {
             var tType = typeof(T);
-            var classProperties = tType.GetProperties().ToList();
+            var classProperties = tType.GetProperties().Where(p => p.GetIndexParameters().Length == 0).ToList();
             var reval = new List<T>();
             if (reader != null && !reader.IsClosed)
             {
@@ -469,7 +494,16 @@ namespace SqlSugar
                     else if (IsJsonList(readerValues, item))
                     {
                         var json = readerValues.First(y => y.Key.EqualCase(item.Name)).Value.ToString();
-                        result.Add(name, DeserializeObject<List<Dictionary<string, object>>>(json));
+                        if (IsMongoDb())
+                        {
+                            var q=InstanceFactory.GetInsertBuilder(this.Context.CurrentConnectionConfig);
+                            var qv =q.DeserializeObjectFunc(json, item.PropertyType);
+                            result.Add(name, qv);
+                        }
+                        else
+                        {
+                            result.Add(name, DeserializeObject<List<Dictionary<string, object>>>(json));
+                        }
                     }
                     else if (IsBytes(readerValues, item))
                     {
@@ -505,7 +539,20 @@ namespace SqlSugar
                     }
                     else
                     {
-                        result.Add(name, DataReaderToDynamicList_Part(readerValues, item, reval, mappingKeys));
+                        List<string> ignorePropertyNames = null;
+                        if (this.QueryBuilder?.SelectNewIgnoreColumns?.Any() == true)
+                        {
+                           var ignoreColumns= this.QueryBuilder.SelectNewIgnoreColumns.Where(it => it.Value == item.PropertyType.Name).ToList();
+                           if (ignoreColumns.Any()) 
+                           {
+                                ignorePropertyNames = ignoreColumns.Select(it => it.Key).ToList();
+                           } 
+                           if (ignorePropertyNames?.Contains(name)==true) 
+                           {
+                               continue;
+                           }
+                        }
+                        result.Add(name, DataReaderToDynamicList_Part(readerValues, item, reval, mappingKeys, ignorePropertyNames));
                     }
                 }
                 else
@@ -522,7 +569,7 @@ namespace SqlSugar
                         var type = UtilMethods.GetUnderType(item.PropertyType);
                         if (addValue == DBNull.Value || addValue == null)
                         {
-                            if (item.PropertyType.IsIn(UtilConstants.IntType, UtilConstants.DecType, UtilConstants.DobType, UtilConstants.ByteType))
+                            if (item.PropertyType.IsIn(UtilConstants.IntType,UtilConstants.LongType, UtilConstants.DecType, UtilConstants.DobType, UtilConstants.ByteType))
                             {
                                 addValue = 0;
                             }
@@ -634,8 +681,16 @@ namespace SqlSugar
             return isArray || isListItem;
         }
 
-        private static bool IsJsonList(Dictionary<string, object> readerValues, PropertyInfo item)
+        private bool IsJsonList(Dictionary<string, object> readerValues, PropertyInfo item)
         {
+            if (IsMongoDb())
+            {
+                return item.PropertyType.FullName.IsCollectionsList() &&
+                            readerValues.Any(y => y.Key.EqualCase(item.Name)) &&
+                            readerValues.First(y => y.Key.EqualCase(item.Name)).Value != null &&
+                            readerValues.First(y => y.Key.EqualCase(item.Name)).Value.GetType().FullName == "MongoDB.Bson.BsonArray" &&
+                            Regex.IsMatch(readerValues.First(y => y.Key.EqualCase(item.Name)).Value.ToString(), @"^\[{.+\}]$");
+            }
             return item.PropertyType.FullName.IsCollectionsList() &&
                                         readerValues.Any(y => y.Key.EqualCase(item.Name)) &&
                                         readerValues.First(y => y.Key.EqualCase(item.Name)).Value != null &&
@@ -643,7 +698,12 @@ namespace SqlSugar
                                         Regex.IsMatch(readerValues.First(y => y.Key.EqualCase(item.Name)).Value.ToString(), @"^\[{.+\}]$");
         }
 
-        private Dictionary<string, object> DataReaderToDynamicList_Part<T>(Dictionary<string, object> readerValues, PropertyInfo item, List<T> reval, Dictionary<string, string> mappingKeys = null)
+        private bool IsMongoDb()
+        {
+            return this.Context?.CurrentConnectionConfig?.DbType == DbType.MongoDb;
+        }
+
+        private Dictionary<string, object> DataReaderToDynamicList_Part<T>(Dictionary<string, object> readerValues, PropertyInfo item, List<T> reval, Dictionary<string, string> mappingKeys = null,List<string> ignoreColumns=null)
         {
             Dictionary<string, object> result = new Dictionary<string, object>();
             var type = item.PropertyType;
@@ -671,6 +731,10 @@ namespace SqlSugar
                 var typeName = type.Name;
                 if (prop.PropertyType.IsClass())
                 {
+                    if (ignoreColumns?.Contains(name) == true) 
+                    {
+                        continue;
+                    }
                     var suagrColumn = prop.GetCustomAttribute<SugarColumn>();
                     if (suagrColumn != null && suagrColumn.IsJson)
                     {
@@ -736,6 +800,7 @@ namespace SqlSugar
                         var addItem = readerValues[info];
                         if (addItem == DBNull.Value)
                             addItem = null;
+                        var underType = UtilMethods.GetUnderType(prop.PropertyType);
                         if (prop.PropertyType == UtilConstants.IntType)
                         {
                             addItem = addItem.ObjToInt();
@@ -751,6 +816,14 @@ namespace SqlSugar
                         else if (UtilMethods.GetUnderType(prop.PropertyType) == UtilConstants.IntType && addItem != null)
                         {
                             addItem = addItem.ObjToInt();
+                        }
+                        else if (underType == UtilConstants.LongType && addItem != null)
+                        {
+                            addItem = addItem.ObjToLong();
+                        }
+                        else if (addItem!=null&&underType?.FullName == "System.DateOnly") 
+                        {
+                            addItem = Convert.ToDateTime(addItem).ToString("yyyy-MM-dd");
                         }
                         else if (UtilMethods.GetUnderType(prop.PropertyType).IsEnum() && addItem is decimal)
                         {
@@ -1257,5 +1330,15 @@ namespace SqlSugar
         }
         #endregion
 
+        #region Other
+        public string EscapeLikeValue(string value, char wildcard = '%') 
+        {
+            return UtilMethods.EscapeLikeValue(this.Context, value, wildcard);
+        }
+        public string EscapeLikeValue(string value, char [] wildcards)
+        {
+            return UtilMethods.EscapeLikeValue(this.Context, value, wildcards);
+        }
+        #endregion
     }
 }

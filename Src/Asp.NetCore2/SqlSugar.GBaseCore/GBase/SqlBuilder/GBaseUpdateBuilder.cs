@@ -115,7 +115,7 @@ namespace SqlSugar.GBase
                 }
                 else
                 {
-                    return "'" + value.ToString() + "'";
+                    return "'" + value.ToString().ToSqlFilter() + "'";
                 }
             }
         }
@@ -173,6 +173,10 @@ namespace SqlSugar.GBase
                 }
                 else if (value is bool)
                 {
+                    if (GBaseConfig.IsMySqlMode(this.Context))
+                    {
+                        return string.Format("CAST({0} AS signed)", value.ObjToBool() ? 1 : 0);
+                    }
                     return string.Format("CAST({0} AS boolean)", value.ObjToBool() ? 1 : 0);
                 }
                 else if (type == UtilConstants.StringType || type == UtilConstants.ObjType)

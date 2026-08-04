@@ -31,6 +31,13 @@ namespace OrmTest
         }
         public static void Init()
         {
+            Unitdafasyfasfa.Init();
+            Unitdfaysfa.Init();
+            Unitsdfasfasa.Init();
+            Unitdfsdyss.Init();
+            Unitadfasfafays.Init();
+            Unitadfa12.Init();
+            Unitsdfa1231.Init();
             Unitadfad1.Init();
             UnitWeek.Init();
             UnitTest.Init();
@@ -41,6 +48,10 @@ namespace OrmTest
             UnitUpdateNavOneToOneFalse.Init();
             UnitCreateType.Init();
             UnitSubToList.Init();
+            UStorageable.Init();
+            UFastest.Init();
+            UNavigationProperties.Init();
+            USplitTable.Init();
             Bulk();
             CodeFirst();
             Updateable();

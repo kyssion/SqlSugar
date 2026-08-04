@@ -16,6 +16,7 @@ namespace SqlSugar.OceanBaseForOracle
         public OceanBaseForOracleExpressionContext()
         {
             base.DbMehtods = new OceanBaseForOracleMethod();
+            base.Case = new ExpressionContextCase();
         }
         public override string SqlParameterKeyWord
         {
@@ -75,11 +76,26 @@ namespace SqlSugar.OceanBaseForOracle
 
         public override string GetLimit()
         {
-            return "AND ROWNUM=1";
+            int num = 1;
+            if (this.Case?.Num > 1)
+            {
+                num = this.Case.Num;
+            }
+            return (this.Case?.HasWhere == true ? "AND" : "WHERE") + " ROWNUM=" + num;
         }
     }
     public partial class OceanBaseForOracleMethod : DefaultDbMethod, IDbMethods
     {
+        public override string UNIX_TIMESTAMP(MethodCallExpressionModel model)
+        {
+            var parameterNameA = model.Args[0].MemberName;
+            return $" (CAST({parameterNameA} AS DATE) - DATE '1970-01-01') * 86400 ";
+        }
+        public override string IsNullOrEmpty(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            return string.Format("( {0} IS NULL )", parameter.MemberName);
+        }
         public override string WeekOfYear(MethodCallExpressionModel mode)
         {
             var parameterNameA = mode.Args[0].MemberName;
@@ -104,7 +120,14 @@ namespace SqlSugar.OceanBaseForOracle
         }
         public override string GetStringJoinSelector(string result, string separator)
         {
-            return $"listagg(to_char({result}),'{separator}') within group(order by {result}) ";
+            if (result.Contains(","))
+            {
+                return $"listagg(to_char({result.Split(',').First()}),'{separator}') within group(order by {result.Split(',').Last()}) ";
+            }
+            else
+            {
+                return $"listagg(to_char({result}),'{separator}') within group(order by {result}) ";
+            }
         }
         public override string HasValue(MethodCallExpressionModel model)
         {
@@ -211,8 +234,10 @@ namespace SqlSugar.OceanBaseForOracle
                     return string.Format("(CAST(TO_CHAR({0},'mi') AS NUMBER))", parameter.MemberName);
                 case DateType.Millisecond:
                     return string.Format("(CAST(TO_CHAR({0},'ff3') AS NUMBER))", parameter.MemberName);
+                case DateType.Quarter:
+                    return string.Format("(CAST(TO_CHAR({0},'q') AS NUMBER))", parameter.MemberName);
                 case DateType.Weekday:
-                    return $" to_char({parameter.MemberName},'day') ";
+                    return $" (TO_NUMBER(TO_CHAR({parameter.MemberName}, 'D'))-1) ";
                 case DateType.Day:
                 default:
                     return string.Format("(CAST(TO_CHAR({0},'dd') AS NUMBER))", parameter.MemberName);
@@ -228,11 +253,10 @@ namespace SqlSugar.OceanBaseForOracle
             switch (type)
             {
                 case DateType.Year:
-                    time = 1 * 365;
-                    break;
+                    // 每年 = 12 个月
+                    return $"ADD_MONTHS({parameter.MemberName}, ({parameter2.MemberName}) * 12)";
                 case DateType.Month:
-                    time = 1 * 30;
-                    break;
+                    return $"ADD_MONTHS({parameter.MemberName}, {parameter2.MemberName})";
                 case DateType.Day:
                     break;
                 case DateType.Hour:
@@ -273,8 +297,9 @@ namespace SqlSugar.OceanBaseForOracle
         public override string ToDate(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
-            return string.Format(" cast({0} as TIMESTAMP)", parameter.MemberName);
+            return string.Format(" TO_TIMESTAMP({0}, 'YYYY-MM-DD HH24:MI:SS.FF') ", parameter.MemberName);
         }
+
         public override string ToDateShort(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
@@ -311,7 +336,47 @@ namespace SqlSugar.OceanBaseForOracle
         }
         public override string DateIsSameByType(MethodCallExpressionModel model)
         {
-            throw new NotSupportedException("Oracle NotSupportedException DateIsSameDay");
+            var parameter = model.Args[0];
+            var parameter2 = model.Args[1];
+            var parameter3 = model.Args[2];
+
+            var dateType = parameter3.MemberValue.ObjToString().ToLower();
+            var date1 = parameter.MemberName;
+            var date2 = parameter2.MemberName;
+
+            if (dateType == "year")
+            {
+                return string.Format("(EXTRACT(YEAR FROM {0}) = EXTRACT(YEAR FROM {1}))", date1, date2);
+            }
+            else if (dateType == "month")
+            {
+                return string.Format("(EXTRACT(YEAR FROM {0}) = EXTRACT(YEAR FROM {1}) AND EXTRACT(MONTH FROM {0}) = EXTRACT(MONTH FROM {1}))", date1, date2);
+            }
+            else if (dateType == "day")
+            {
+                return string.Format("(TRUNC({0}) = TRUNC({1}))", date1, date2);
+            }
+            else if (dateType == "hour")
+            {
+                return string.Format("(TRUNC({0}, 'HH24') = TRUNC({1}, 'HH24'))", date1, date2);
+            }
+            else if (dateType == "minute")
+            {
+                return string.Format("(TRUNC({0}, 'MI') = TRUNC({1}, 'MI'))", date1, date2);
+            }
+            else if (dateType == "second")
+            {
+                return string.Format("(TRUNC({0}, 'SS') = TRUNC({1}, 'SS'))", date1, date2);
+            }
+            else if (dateType == "week" || dateType == "weekday")
+            {
+                return string.Format("(TRUNC({0}, 'IW') = TRUNC({1}, 'IW'))", date1, date2);
+            }
+            else
+            {
+                // 默认按天比较
+                return string.Format("(TRUNC({0}) = TRUNC({1}))", date1, date2);
+            }
         }
         public override string Length(MethodCallExpressionModel model)
         {
@@ -380,7 +445,28 @@ namespace SqlSugar.OceanBaseForOracle
         {
             var parameterNameA = mode.Args[0].MemberName;
             var parameterNameB = mode.Args[1].MemberName;
-            return $" SUBSTR({parameterNameA}, -2, {parameterNameB})  ";
+            return $" SUBSTR({parameterNameA}, (LENGTH({parameterNameA})-2), {parameterNameB})  ";
+        }
+
+        public override string Ceil(MethodCallExpressionModel mode)
+        {
+            var parameterNameA = mode.Args[0].MemberName;
+            return $" CEIL({parameterNameA}) ";
+        }
+
+        public override string NewUid(MethodCallExpressionModel mode)
+        {
+            return "   SUBSTR(LOWER(RAWTOHEX(SYS_GUID())), 1, 8) ||\r\n  '-' ||\r\n  SUBSTR(LOWER(RAWTOHEX(SYS_GUID())), 9, 4) ||\r\n  '-' ||\r\n  SUBSTR(LOWER(RAWTOHEX(SYS_GUID())), 13, 4) ||\r\n  '-' ||\r\n  SUBSTR(LOWER(RAWTOHEX(SYS_GUID())), 17, 4) ||\r\n  '-' ||\r\n  SUBSTR(LOWER(RAWTOHEX(SYS_GUID())), 21)  ";
+        }
+        public override string FullTextContains(MethodCallExpressionModel mode)
+        {
+            var columns = mode.Args[0].MemberName;
+            if (mode.Args[0].MemberValue is List<string>)
+            {
+                columns = "(" + string.Join(",", mode.Args[0].MemberValue as List<string>) + ")";
+            }
+            var searchWord = mode.Args[1].MemberName;
+            return $" CONTAINS({columns}, {searchWord}, 1) ";
         }
     }
 }

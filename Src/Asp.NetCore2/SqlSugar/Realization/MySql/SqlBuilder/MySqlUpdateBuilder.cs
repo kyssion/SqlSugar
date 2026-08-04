@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -149,6 +150,10 @@ namespace SqlSugar
                 else if (type == UtilConstants.ByteArrayType)
                 {
                     string bytesString = "0x" + BitConverter.ToString((byte[])value).Replace("-", "");
+                    if (bytesString == "0x")
+                    {
+                        bytesString = "''";
+                    }
                     return bytesString;
                 }
                 else if (type.IsEnum())
@@ -169,7 +174,15 @@ namespace SqlSugar
                 else if (type == UtilConstants.IntType)
                 {
                     return GetString(value);
-                } 
+                }
+                else if (value is decimal decValue)
+                {
+                    return "'"+decValue.ToString(CultureInfo.InvariantCulture)+"'";
+                }
+                else if (value is double douValue)
+                {
+                    return "'" + douValue.ToString(CultureInfo.InvariantCulture) + "'";
+                }
                 else if (type == UtilConstants.BoolType)
                 {
                     return value.ObjToBool() ? "1" : "0";

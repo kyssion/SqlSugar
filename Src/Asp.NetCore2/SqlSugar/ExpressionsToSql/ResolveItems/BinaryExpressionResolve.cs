@@ -143,7 +143,15 @@ namespace SqlSugar
         {
             var leftString = GetNewExpressionValue(expression.Left);
             var RightString = GetNewExpressionValue(expression.Right);
+            if (leftString == null&& base.BaseParameter?.BaseExpression==null && expression.Left is ParameterExpression parameterExpression) 
+            {
+                leftString = this.Context.SqlParameterKeyWord+"MethodConst1";
+            }
             var joinString = this.Context.DbMehtods.MergeString(leftString, RightString);
+            if (this.Context is KdbndpExpressionContext&&this.Context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel==DbType.SqlServer) 
+            {
+                joinString = new SqlServerMethod().MergeString(leftString, RightString);
+            }
             if (this.Context.Result.Contains(ExpressionConst.FormatSymbol))
             {
                 base.Context.Result.Replace("{0}", $" {joinString} ");
@@ -162,8 +170,13 @@ namespace SqlSugar
             var isEqual = expression.NodeType == ExpressionType.Equal;
             var isComparisonOperator = ExpressionTool.IsComparisonOperator(expression);
             base.ExactExpression = expression;
-            var leftExpression = expression.Left;
-            var rightExpression = expression.Right;
+            var leftExpression = ExpressionTool.RemoveConvert(expression.Left);
+            var rightExpression =ExpressionTool.RemoveConvert(expression.Right);
+            if (leftExpression.Type == typeof(char))
+            {
+                leftExpression = expression.Left;
+                rightExpression = expression.Right;
+            }
             if (operatorValue.IsIn("AND","OR")&&leftExpression is BinaryExpression exp) 
             {
                 if (exp?.Left is BinaryExpression expChild) 

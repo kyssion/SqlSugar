@@ -1,4 +1,5 @@
-﻿using SqlSugar;
+﻿using PgSqlTest.UserTestCases;
+using SqlSugar;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,8 +19,7 @@ namespace OrmTest
             {
                 OnLogExecuting = (sql, p) =>
                 {
-                    Console.WriteLine(sql);
-                    Console.WriteLine(string.Join(",", p?.Select(it => it.ParameterName + ":" + it.Value)));
+                    Console.WriteLine(UtilMethods.GetNativeSql(sql,p)); 
                 }
             }
         });
@@ -31,6 +31,13 @@ namespace OrmTest
         }
         public static void Init()
         {
+            Unitdaadsysfs.Init();
+            Unitdfasfafay.Init();
+            Unitsdfasyss.Init();
+            Unitdfaysss.Init();
+            Unitadfafasfa1.Init();
+            Unita1ddys.Init();
+            Unit1sdgsaaysdfa.Init();
             UnitBulkMergeaa.Init();
             Unitadsfayasdfaaay.Init();
             Unitafdafas.Init();

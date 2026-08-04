@@ -31,6 +31,8 @@ namespace SqlSugar
         #endregion
 
         #region Properties
+        public virtual bool IsNoSql { get; set; }
+        internal bool IsOpenAsync { get; set; }
         protected List<IDataParameter> OutputParameters { get; set; }
         public virtual string SqlParameterKeyWord { get { return "@"; } }
         public IDbTransaction Transaction { get; set; }
@@ -39,14 +41,21 @@ namespace SqlSugar
         internal bool OldClearParameters { get; set; }
         public IDataParameterCollection DataReaderParameters { get; set; }
         public TimeSpan SqlExecutionTime { get { return AfterTime - BeforeTime; } }
+        public TimeSpan ConnectionExecutionTime { get { return CheckConnectionAfterTime - CheckConnectionBeforeTime; } }
+        public TimeSpan GetDataExecutionTime { get { return GetDataAfterTime - GetDataBeforeTime; } }
         /// <summary>
         /// Add, delete and modify: the number of affected items;
         /// </summary>
-        public int SqlExecuteCount { get; private set; } = 0;
+        public int SqlExecuteCount { get; protected set; } = 0;
+        public SugarActionType SqlExecuteType { get=> this.Context.SugarActionType;} 
         public StackTraceInfo SqlStackTrace { get { return UtilMethods.GetStackTrace(); } }
         public bool IsDisableMasterSlaveSeparation { get; set; }
         internal DateTime BeforeTime = DateTime.MinValue;
         internal DateTime AfterTime = DateTime.MinValue;
+        internal DateTime GetDataBeforeTime = DateTime.MinValue;
+        internal DateTime GetDataAfterTime = DateTime.MinValue;
+        internal DateTime CheckConnectionBeforeTime = DateTime.MinValue;
+        internal DateTime CheckConnectionAfterTime = DateTime.MinValue;
         public virtual IDbBind DbBind
         {
             get
@@ -66,6 +75,10 @@ namespace SqlSugar
         public virtual bool IsClearParameters { get; set; }
         public virtual Action<string, SugarParameter[]> LogEventStarting => this.Context.CurrentConnectionConfig.AopEvents?.OnLogExecuting;
         public virtual Action<string, SugarParameter[]> LogEventCompleted => this.Context.CurrentConnectionConfig.AopEvents?.OnLogExecuted;
+        public virtual Action<IDbConnection> CheckConnectionExecuting => this.Context.CurrentConnectionConfig.AopEvents?.CheckConnectionExecuting;
+        public virtual Action<IDbConnection, TimeSpan> CheckConnectionExecuted => this.Context.CurrentConnectionConfig.AopEvents?.CheckConnectionExecuted;
+        public virtual Action<string, SugarParameter[]> OnGetDataReadering => this.Context.CurrentConnectionConfig.AopEvents?.OnGetDataReadering;
+        public virtual Action<string, SugarParameter[], TimeSpan> OnGetDataReadered => this.Context.CurrentConnectionConfig.AopEvents?.OnGetDataReadered;
         public virtual Func<string, SugarParameter[], KeyValuePair<string, SugarParameter[]>> ProcessingEventStartingSQL => this.Context.CurrentConnectionConfig.AopEvents?.OnExecutingChangeSql;
         protected virtual Func<string, string> FormatSql { get; set; }
         public virtual Action<SqlSugarException> ErrorEvent => this.Context.CurrentConnectionConfig.AopEvents?.OnError;
@@ -111,6 +124,10 @@ namespace SqlSugar
         {
             CheckConnection();
         }
+        public virtual async Task OpenAsync() 
+        {
+            await CheckConnectionAsync();
+        }
         public SugarConnection  OpenAlways() 
         {
             SugarConnection result = new SugarConnection();
@@ -120,7 +137,7 @@ namespace SqlSugar
             this.Context.CurrentConnectionConfig.IsAutoCloseConnection = false;
             this.Open();
             return result;
-        }
+        } 
         public virtual void Close()
         {
             if (this.Transaction != null)
@@ -175,6 +192,7 @@ namespace SqlSugar
         }
         public virtual void CheckConnection()
         {
+            this.CheckConnectionBefore(this.Connection);
             if (this.Connection.State != ConnectionState.Open)
             {
                 try
@@ -183,13 +201,19 @@ namespace SqlSugar
                 }
                 catch (Exception ex)
                 {
+                    if (this.Context.CurrentConnectionConfig?.DbType==DbType.SqlServer&&ex.Message?.Contains("provider: SSL")==true) 
+                    {
+                        Check.ExceptionEasy(true,ex.Message, "SSL出错，因为升级了驱动,字符串增加Encrypt=True;TrustServerCertificate=True;即可。详细错误：" + ex.Message);
+                    }
                     Check.Exception(true, ErrorMessage.ConnnectionOpen, ex.Message+$"DbType=\"{this.Context.CurrentConnectionConfig.DbType}\";ConfigId=\"{this.Context.CurrentConnectionConfig.ConfigId}\"");
                 }
             }
+            this.CheckConnectionAfter(this.Connection);
         }
 
         public virtual async Task CheckConnectionAsync()
         {
+            this.CheckConnectionBefore(this.Connection);
             if (this.Connection.State != ConnectionState.Open)
             {
                 try
@@ -199,6 +223,31 @@ namespace SqlSugar
                 catch (Exception ex)
                 {
                     Check.Exception(true, ErrorMessage.ConnnectionOpen, ex.Message + $"DbType=\"{this.Context.CurrentConnectionConfig.DbType}\";ConfigId=\"{this.Context.CurrentConnectionConfig.ConfigId}\"");
+                }
+            }
+            this.CheckConnectionAfter(this.Connection);
+        }
+        public virtual void CheckConnectionBefore(IDbConnection Connection)
+        {
+            this.CheckConnectionBeforeTime = DateTime.Now;
+            if (this.IsEnableLogEvent)
+            {
+                Action<IDbConnection> action = CheckConnectionExecuting;
+                if (action != null)
+                {
+                    action(Connection);
+                }
+            }
+        }
+        public virtual void CheckConnectionAfter(IDbConnection Connection)
+        {
+            this.CheckConnectionAfterTime = DateTime.Now;
+            if (this.IsEnableLogEvent)
+            {
+                Action<IDbConnection, TimeSpan> action = CheckConnectionExecuted;
+                if (action != null)
+                {
+                    action(Connection,this.ConnectionExecutionTime);
                 }
             }
         }
@@ -296,10 +345,10 @@ namespace SqlSugar
             var result = new DbResult<bool>();
             try
             {
-                this.BeginTran();
+                this.BeginTran(); 
                 if (action != null)
                     action();
-                this.CommitTran();
+                this.CommitTran(); 
                 result.Data = result.IsSuccess = true;
             }
             catch (Exception ex)
@@ -436,15 +485,18 @@ namespace SqlSugar
                 if (this.ProcessingEventStartingSQL != null)
                     ExecuteProcessingSQL(ref sql, ref parameters);
                 ExecuteBefore(sql, parameters);
-                IDbCommand sqlCommand = GetCommand(sql, parameters);
-                int count = sqlCommand.ExecuteNonQuery();
-                if (this.IsClearParameters)
-                    sqlCommand.Parameters.Clear();
-                // 影响条数
-                this.SqlExecuteCount = count;
-                ExecuteAfter(sql, parameters);
-                sqlCommand.Dispose();
-                return count;
+                using (IDbCommand sqlCommand = GetCommand(sql, parameters))
+                {
+                    int count = sqlCommand.ExecuteNonQuery();
+                    if (this.IsClearParameters)
+                        sqlCommand.Parameters.Clear();
+                    // 影响条数
+                    this.SqlExecuteCount = count;
+                    ExecuteAfter(sql, parameters);
+
+                    //sqlCommand.Dispose();
+                    return count;
+                }
             }
             catch (Exception ex)
             {
@@ -584,18 +636,20 @@ namespace SqlSugar
                 if (this.ProcessingEventStartingSQL != null)
                     ExecuteProcessingSQL(ref sql,ref parameters);
                 ExecuteBefore(sql, parameters);
-                var sqlCommand = GetCommand(sql, parameters);
-                int count;
-                if (this.CancellationToken == null)
-                    count=await sqlCommand.ExecuteNonQueryAsync();
-                else
-                    count=await sqlCommand.ExecuteNonQueryAsync(this.CancellationToken.Value);
-                if (this.IsClearParameters)
-                    sqlCommand.Parameters.Clear();
-                this.SqlExecuteCount = count;
-                ExecuteAfter(sql, parameters);
-                sqlCommand.Dispose();
-                return count;
+                using (var sqlCommand = IsOpenAsync ? await GetCommandAsync(sql, parameters) : GetCommand(sql, parameters))
+                {
+                    int count;
+                    if (this.CancellationToken == null)
+                        count = await sqlCommand.ExecuteNonQueryAsync();
+                    else
+                        count = await sqlCommand.ExecuteNonQueryAsync(this.CancellationToken.Value);
+                    if (this.IsClearParameters)
+                        sqlCommand.Parameters.Clear();
+                    this.SqlExecuteCount = count;
+                    ExecuteAfter(sql, parameters);
+                    //sqlCommand.Dispose();
+                    return count;
+                }
             }
             catch (Exception ex)
             {
@@ -626,7 +680,7 @@ namespace SqlSugar
                 if (this.ProcessingEventStartingSQL != null)
                     ExecuteProcessingSQL(ref sql,ref parameters);
                 ExecuteBefore(sql, parameters);
-                var sqlCommand = GetCommand(sql, parameters);
+                var sqlCommand = IsOpenAsync ? await GetCommandAsync(sql, parameters) : GetCommand(sql, parameters);
                 DbDataReader sqlDataReader;
                 if(this.CancellationToken==null)
                     sqlDataReader=await sqlCommand.ExecuteReaderAsync(this.IsAutoClose() ? CommandBehavior.CloseConnection : CommandBehavior.Default);
@@ -665,7 +719,7 @@ namespace SqlSugar
                 if (this.ProcessingEventStartingSQL != null)
                     ExecuteProcessingSQL(ref sql,ref parameters);
                 ExecuteBefore(sql, parameters);
-                var sqlCommand = GetCommand(sql, parameters);
+                var sqlCommand = IsOpenAsync ? await GetCommandAsync(sql, parameters) : GetCommand(sql, parameters);
                 object scalar;
                 if(CancellationToken==null)
                     scalar=await sqlCommand.ExecuteScalarAsync();
@@ -695,10 +749,22 @@ namespace SqlSugar
         public virtual Task<DataSet> GetDataSetAllAsync(string sql, params SugarParameter[] parameters)
         {
             Async();
+
             //False asynchrony . No Support DataSet
-            return Task.Run(() => {
-               return  GetDataSetAll(sql, parameters);
-            });
+            if (CancellationToken == null)
+            {
+                return Task.Run(() =>
+                {
+                    return GetDataSetAll(sql, parameters);
+                });
+            }
+            else 
+            {
+                return Task.Run(() =>
+                {
+                    return GetDataSetAll(sql, parameters);
+                },this.CancellationToken.Value);
+            }
         }
         #endregion
 
@@ -724,7 +790,11 @@ namespace SqlSugar
             }
         }
 
-
+        public virtual Task<string> GetStringAsync(string sql, object parameters, CancellationToken cancellationToken)
+        {
+            this.CancellationToken = cancellationToken;
+            return GetStringAsync(sql, this.GetParameters(parameters));
+        }
         public virtual Task<string> GetStringAsync(string sql, object parameters)
         {
             return GetStringAsync(sql, this.GetParameters(parameters));
@@ -776,7 +846,11 @@ namespace SqlSugar
         {
             return GetScalar(sql, parameters).ObjToInt();
         }
-
+        public virtual Task<int> GetIntAsync(string sql, object parameters, CancellationToken cancellationToken)
+        {
+            this.CancellationToken = cancellationToken;
+            return GetIntAsync(sql, this.GetParameters(parameters));
+        }
         public virtual Task<int> GetIntAsync(string sql, object parameters)
         {
             return GetIntAsync(sql, this.GetParameters(parameters));
@@ -817,7 +891,11 @@ namespace SqlSugar
                 return GetDouble(sql, parameters.ToArray());
             }
         }
-
+        public virtual Task<Double> GetDoubleAsync(string sql, object parameters, CancellationToken cancellationToken)
+        {
+            this.CancellationToken = cancellationToken;
+            return GetDoubleAsync(sql, this.GetParameters(parameters));
+        }
         public virtual Task<Double> GetDoubleAsync(string sql, object parameters)
         {
             return GetDoubleAsync(sql, this.GetParameters(parameters));
@@ -991,7 +1069,7 @@ namespace SqlSugar
             var result = SqlQuery<T, T2, T3, T4, T5, T6, object>(sql, parameters);
             return new Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(result.Item1, result.Item2, result.Item3, result.Item4, result.Item5, result.Item6);
         }
-        public Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> SqlQuery<T, T2, T3, T4, T5, T6, T7>(string sql, object parameters = null)
+        public virtual Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> SqlQuery<T, T2, T3, T4, T5, T6, T7>(string sql, object parameters = null)
         {
             var parsmeterArray = this.GetParameters(parameters);
             this.Context.InitMappingInfo<T>();
@@ -999,7 +1077,10 @@ namespace SqlSugar
             builder.SqlQueryBuilder.sql.Append(sql);
             if (parsmeterArray != null && parsmeterArray.Any())
                 builder.SqlQueryBuilder.Parameters.AddRange(parsmeterArray);
-            using (var dataReader = this.GetDataReader(builder.SqlQueryBuilder.ToSqlString(), builder.SqlQueryBuilder.Parameters.ToArray()))
+            string sqlString = builder.SqlQueryBuilder.ToSqlString();
+            SugarParameter[] Parameters = builder.SqlQueryBuilder.Parameters.ToArray();
+            this.GetDataBefore(sqlString, Parameters);
+            using (var dataReader = this.GetDataReader(sqlString, Parameters))
             {
                 DbDataReader DbReader = (DbDataReader)dataReader;
                 List<T> result = new List<T>();
@@ -1060,6 +1141,7 @@ namespace SqlSugar
                     }
                     this.Context.Ado.DataReaderParameters = null;
                 }
+                this.GetDataAfter(sqlString, Parameters);
                 return Tuple.Create<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(result, result2, result3, result4, result5, result6, result7);
             }
         }
@@ -1116,7 +1198,7 @@ namespace SqlSugar
             var result =await SqlQueryAsync<T, T2, T3, T4, T5, T6, object>(sql, parameters);
             return new Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>>(result.Item1, result.Item2, result.Item3, result.Item4, result.Item5, result.Item6);
         }
-        public async Task<Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> SqlQueryAsync<T, T2, T3, T4, T5, T6, T7>(string sql, object parameters = null)
+        public virtual async Task<Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>> SqlQueryAsync<T, T2, T3, T4, T5, T6, T7>(string sql, object parameters = null)
         {
             var parsmeterArray = this.GetParameters(parameters);
             this.Context.InitMappingInfo<T>();
@@ -1124,7 +1206,10 @@ namespace SqlSugar
             builder.SqlQueryBuilder.sql.Append(sql);
             if (parsmeterArray != null && parsmeterArray.Any())
                 builder.SqlQueryBuilder.Parameters.AddRange(parsmeterArray);
-            using (var dataReader = await this.GetDataReaderAsync(builder.SqlQueryBuilder.ToSqlString(), builder.SqlQueryBuilder.Parameters.ToArray()))
+            string sqlString = builder.SqlQueryBuilder.ToSqlString();
+            SugarParameter[] Parameters = builder.SqlQueryBuilder.Parameters.ToArray();
+            this.GetDataBefore(sqlString, Parameters);
+            using (var dataReader = await this.GetDataReaderAsync(sqlString, Parameters))
             {
                 DbDataReader DbReader = (DbDataReader)dataReader;
                 List<T> result = new List<T>();
@@ -1181,6 +1266,7 @@ namespace SqlSugar
                     }
                     this.Context.Ado.DataReaderParameters = null;
                 }
+                this.GetDataAfter(sqlString, Parameters);
                 return Tuple.Create<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>>(result, result2, result3, result4, result5, result6, result7);
             }
         }
@@ -1346,6 +1432,11 @@ namespace SqlSugar
                 return GetScalar(sql, parameters.ToArray());
             }
         }
+        public virtual Task<object> GetScalarAsync(string sql, object parameters, CancellationToken cancellationToken)
+        {
+            this.CancellationToken = cancellationToken;
+            return GetScalarAsync(sql, this.GetParameters(parameters));
+        }
         public virtual Task<object> GetScalarAsync(string sql, object parameters)
         {
             return GetScalarAsync(sql, this.GetParameters(parameters));
@@ -1399,6 +1490,11 @@ namespace SqlSugar
         #endregion
 
         #region  Helper
+        public  virtual async Task<DbCommand> GetCommandAsync(string sql, SugarParameter[] parameters)
+        {
+            await Task.FromResult(0);
+            throw new NotImplementedException();
+        }
         public async Task CloseAsync()
         {
             if (this.Transaction != null)
@@ -1439,7 +1535,7 @@ namespace SqlSugar
                 this.Context.Root.AsyncId = Guid.NewGuid(); ;
             }
         }
-        private static bool NextResult(IDataReader dataReader)
+        protected bool NextResult(IDataReader dataReader)
         {
             try
             {
@@ -1535,6 +1631,44 @@ namespace SqlSugar
                 this.OldClearParameters = false;
             }
         }
+        public virtual void GetDataBefore(string sql, SugarParameter[] parameters)
+        {
+            this.GetDataBeforeTime = DateTime.Now;
+            if (this.IsEnableLogEvent)
+            {
+                Action<string, SugarParameter[]> action = OnGetDataReadering;
+                if (action != null)
+                {
+                    if (parameters == null || parameters.Length == 0)
+                    {
+                        action(sql, new SugarParameter[] { });
+                    }
+                    else
+                    {
+                        action(sql, parameters);
+                    }
+                }
+            }
+        }
+        public virtual void GetDataAfter(string sql, SugarParameter[] parameters)
+        {
+            this.GetDataAfterTime = DateTime.Now;
+            if (this.IsEnableLogEvent)
+            {
+                Action<string, SugarParameter[], TimeSpan> action = OnGetDataReadered;
+                if (action != null)
+                {
+                    if (parameters == null || parameters.Length == 0)
+                    {
+                        action(sql, new SugarParameter[] { }, GetDataExecutionTime);
+                    }
+                    else
+                    {
+                        action(sql, parameters, GetDataExecutionTime);
+                    }
+                }
+            }
+        }
         public virtual SugarParameter[] GetParameters(object parameters, PropertyInfo[] propertyInfo = null)
         {
             if (parameters == null) return null;
@@ -1615,6 +1749,9 @@ namespace SqlSugar
         }
         protected void InitParameters(ref string sql, SugarParameter[] parameters)
         {
+            this.SqlExecuteCount = 0;
+            this.BeforeTime = DateTime.MinValue;
+            this.AfterTime = DateTime.MinValue;
             if (parameters.HasValue())
             {
                 foreach (var item in parameters)
@@ -1669,7 +1806,7 @@ namespace SqlSugar
 
  
 
-        private List<TResult> GetData<TResult>(Type entityType, IDataReader dataReader)
+        protected List<TResult> GetData<TResult>(Type entityType, IDataReader dataReader)
         {
             List<TResult> result;
             if (entityType == UtilConstants.DynamicType)
@@ -1697,7 +1834,7 @@ namespace SqlSugar
             }
             return result;
         }
-        private async Task<List<TResult>> GetDataAsync<TResult>(Type entityType, IDataReader dataReader)
+        protected async Task<List<TResult>> GetDataAsync<TResult>(Type entityType, IDataReader dataReader)
         {
             List<TResult> result;
             if (entityType == UtilConstants.DynamicType)

@@ -9,6 +9,7 @@ namespace SqlSugar
 {
     public partial class DefaultDbMethod : IDbMethods
     {
+        public ISqlSugarClient sqlSugarClient { get; set; }
         public virtual string ParameterKeyWord { get; set; }= "@";
         public virtual string RowNumber(MethodCallExpressionModel model) 
         {
@@ -66,6 +67,28 @@ namespace SqlSugar
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             var parameter3 = model.Args[2];
+            var ifTrue = parameter2.MemberName.ObjToString();
+            var ifFalse = parameter3.MemberName.ObjToString();
+            if (ifTrue==ifFalse)
+            {
+                return $" {parameter2.MemberName} ";
+            }
+            if (model.Parameters != null
+                && model.Conext!=null
+                && ifTrue.StartsWith(model.Conext?.SqlParameterKeyWord)
+                && ifFalse.StartsWith(model.Conext?.SqlParameterKeyWord)) 
+            {
+               var p2= model.Parameters.Where(it=>it.ParameterName!=null).FirstOrDefault(it => it.ParameterName.Equals(ifTrue));
+               var p3 = model.Parameters.Where(it => it.ParameterName != null).FirstOrDefault(it => it.ParameterName.Equals(ifFalse));
+                if (p2 != null && p3 != null) 
+                {
+                    if (p2.Value?.Equals(p3.Value) == true) 
+                    {
+                        model.Parameters.Remove(p3);
+                        return $" {parameter2.MemberName} ";
+                    }
+                }
+            }
             return string.Format("( CASE  WHEN {0} THEN {1}  ELSE {2} END )", parameter.MemberName, parameter2.MemberName, parameter3.MemberName);
         }
 
@@ -141,7 +164,15 @@ namespace SqlSugar
                     }
                     else
                     {
-                        inValues.Add(item);
+                        if (item is string &&item.HasValue() && model?.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.DbType == DbType.MySql)
+                        {
+                            var newValue= item.ToString().Replace("\\", "\\\\");
+                            inValues.Add(newValue);
+                        }
+                        else
+                        {
+                            inValues.Add(item);
+                        }
                     }
                 }
             }
@@ -150,7 +181,7 @@ namespace SqlSugar
             var isNvarchar = model.Args.Count == 3;
             if (inValues != null && inValues.Count > 0)
             {
-                if (isNvarchar && model.Args[2].MemberValue.Equals(true))
+                if (isNvarchar && model.Args[2].MemberValue?.Equals(true)==true)
                 {
                     inValueString = inValues.ToArray().ToJoinSqlInValsN();
                 }
@@ -418,7 +449,16 @@ namespace SqlSugar
             var parameter = model.Args[0];
             return string.Format("COUNT(DISTINCT {0} )", parameter.MemberName);
         }
-
+        public virtual string AggregateDistinctSum(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            return string.Format("SUM(DISTINCT {0} )", parameter.MemberName);
+        }
+        public virtual string AggregateDistinctAvg(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            return string.Format("AVG(DISTINCT {0} )", parameter.MemberName);
+        }
         public virtual string MappingColumn(MethodCallExpressionModel model)
         {
             if (model.Args.Count == 1)
@@ -869,7 +909,7 @@ namespace SqlSugar
                         if(sql.Contains(replace))
                         {
                             var value = columnInfo.PropertyInfo.GetValue(item);
-                            var newValue = "null";
+                            string newValue = null;
                             if (value != null) 
                             {
                                 if (UtilMethods.IsNumber(columnInfo.UnderType.Name))
@@ -911,7 +951,26 @@ namespace SqlSugar
                                     newValue = value.ToSqlValue();
                                 }
                             }
+                            if (columnInfo.UnderType == UtilConstants.StringType&& model.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.DbType==DbType.SqlServer) 
+                            {
+                                if (model.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.DisableNvarchar != true)
+                                {
+                                    if (columnInfo.SqlParameterDbType is System.Data.DbType type && type == System.Data.DbType.AnsiString)
+                                    {
+
+                                    }
+                                    else if(newValue==null)
+                                    {
+                                        newValue = "null";
+                                    }
+                                    else 
+                                    {
+                                        newValue = "N" + newValue;
+                                    }
+                                }
+                            }
                             sql = sql.Replace(replace, newValue);
+                            sql = sql.Replace(" = null ", " is null ");
                         }
                     }
                     sb.Append(sql);
@@ -932,7 +991,7 @@ namespace SqlSugar
         {
             if (IsArrayAnyParameter(model))
             {
-                return ListArrayAny(model);
+                return ListArrayAll(model);
             }
             StringBuilder sb = new StringBuilder();
             if (model.Args[0].MemberValue != null && (model.Args[0].MemberValue as IList).Count > 0)
@@ -1076,6 +1135,20 @@ namespace SqlSugar
                             else
                             {
                                 newValue = value.ToSqlValue();
+                                if (columnInfo.EntityName == "String" && model.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.DbType == DbType.SqlServer)
+                                {
+                                    if (model.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.DisableNvarchar != true)
+                                    {
+                                        if (model.DataObject is EntityColumnInfo dc&& dc.SqlParameterDbType is System.Data.DbType type && type == System.Data.DbType.AnsiString)
+                                        {
+
+                                        }
+                                        else
+                                        {
+                                            newValue = "N" + newValue;
+                                        }
+                                    }
+                                }
                             }
                         }
                         //Regex regex = new Regex("\@");
@@ -1102,6 +1175,7 @@ namespace SqlSugar
                 sb.Append(" ) ");
             }
             var result = sb.ToString();
+            result = result.Replace(" = null)", " is null)");
             if (result.IsNullOrEmpty())
             {
                 return " 1=2 ";
@@ -1111,6 +1185,97 @@ namespace SqlSugar
                 return result;
             }
         }
+
+        private string ListArrayAll(MethodCallExpressionModel model)
+        {
+            StringBuilder sb = new StringBuilder();
+            if (model.Args[0].MemberValue != null && (model.Args[0].MemberValue as IList).Count > 0)
+            {
+                sb.Append(" ( ");
+                var listPar = model.Args[1].MemberValue as ListAnyParameter;
+                foreach (var item in (model.Args[0].MemberValue as IList))
+                {
+                    var sql = listPar.Sql;
+                    if (sb.Length > 3)
+                    {
+                        sb.Append("AND");
+                    }
+                    foreach (var columnInfo in listPar.Columns)
+                    {
+                        var value = item;
+                        var newValue = "null";
+                        if (value != null)
+                        {
+                            if (columnInfo.DbTableName != "String" && UtilMethods.IsNumber(columnInfo.UnderType.Name))
+                            {
+                                newValue = value.ToString();
+                            }
+                            else if (columnInfo.UnderType == SqlSugar.UtilConstants.GuidType)
+                            {
+                                newValue = ToGuid(new MethodCallExpressionModel()
+                                {
+                                    Args = new List<MethodCallExpressionArgs>()
+                                       {
+                                            new MethodCallExpressionArgs(){
+                                              MemberValue=value.ToSqlValue(),
+                                              MemberName=value.ToSqlValue()
+                                            }
+                                       }
+                                });
+                            }
+                            else if (columnInfo.UnderType == SqlSugar.UtilConstants.DateType)
+                            {
+                                newValue = ToDate(new MethodCallExpressionModel()
+                                {
+                                    Args = new List<MethodCallExpressionArgs>()
+                                       {
+                                            new MethodCallExpressionArgs(){
+                                              MemberValue=UtilMethods.GetConvertValue( value).ToSqlValue(),
+                                              MemberName=UtilMethods.GetConvertValue( value).ToSqlValue()
+                                            }
+                                       }
+                                });
+                            }
+                            else
+                            {
+                                newValue = value.ToSqlValue();
+                            }
+                        }
+                        //Regex regex = new Regex("\@");
+                        if (!sql.Contains(ParameterKeyWord))
+                        {
+                            sql = sql.Replace(" =)", $" = {newValue})");
+                            if (!sql.Contains(newValue))
+                            {
+                                sql = sql.Replace(" )", $" = {newValue})");
+                            }
+                        }
+                        else
+                        {
+                            Regex reg = new Regex(ParameterKeyWord + @"MethodConst\d+");
+                            sql = reg.Replace(sql, it =>
+                            {
+                                return " " + newValue + " ";
+                            });
+                        }
+
+                    }
+                    sb.Append(sql);
+                }
+                sb.Append(" ) ");
+            }
+            var result = sb.ToString();
+            result = result.Replace(" = null)", " is null)");
+            if (result.IsNullOrEmpty())
+            {
+                return " 1=2 ";
+            }
+            else
+            {
+                return result;
+            }
+        }
+
 
         private static List<MethodCallExpressionArgs> GetStringFormatArgs(string str, object array)
         {
@@ -1186,7 +1351,12 @@ namespace SqlSugar
         {
             return $" uuid_generate_v4() ";
         }
-
+        public virtual string Coalesce(MethodCallExpressionModel mode)
+        {
+            var parameterNameA = mode.Args[0].MemberName;
+            var parameterNameB = mode.Args[1].MemberName;
+            return $" COALESCE({parameterNameA},{parameterNameB}) ";
+        }
         public virtual string FullTextContains(MethodCallExpressionModel mode) 
         {
             var columns = mode.Args[0].MemberName;
@@ -1226,6 +1396,15 @@ namespace SqlSugar
             // 如果需要处理NULL值或其他复杂情况，请在这里添加逻辑  
 
             return queryCondition;
+        }
+        public virtual string SelectFields(MethodCallExpressionModel model)
+        {
+            return string.Join(",", model.Args.Select(it => it.MemberName));
+        }
+        public virtual string UNIX_TIMESTAMP(MethodCallExpressionModel model) 
+        {
+            var parameterNameA = model.Args[0].MemberName; 
+            return $" UNIX_TIMESTAMP({parameterNameA}) ";
         }
     }
 }

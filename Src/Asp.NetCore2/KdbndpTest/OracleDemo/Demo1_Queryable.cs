@@ -1,6 +1,4 @@
-﻿using Kdbndp;
-using KdbndpTypes;
-using SqlSugar;
+﻿ using SqlSugar;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -171,7 +169,7 @@ namespace OrmTest
             var  list4 = db.Queryable<ABMapping>()
               .Mapper(it => it.A, it => it.AId)
               .Mapper(it => it.B, it => it.BId).ToList();
-
+            db.CopyNew().CodeFirst.InitTables<OrderInfo>();
             //Manual mode
             var result = db.Queryable<OrderInfo>().Take(10).Select<ViewOrder>().Mapper((itemModel, cache) =>
             {
@@ -191,9 +189,9 @@ namespace OrmTest
             Console.WriteLine("#### No Entity Start ####");
             var db = GetInstance();
 
-            var list = db.Queryable<dynamic>().AS("order").Where("id=id", new { id = 1 }).ToList();
+            var list = db.Queryable<dynamic>().AS("ORDERTEST011").Where("id=id", new { id = 1 }).ToList();
 
-            var list2 = db.Queryable<dynamic>("o").AS("order").AddJoinInfo("OrderDetail", "i", "o.id=i.OrderId").Where("id=id", new { id = 1 }).Select("o.*").ToList();
+            var list2 = db.Queryable<dynamic>("o").AS("ORDERTEST011").AddJoinInfo("OrderDetail", "i", "o.id=i.OrderId").Where("id=id", new { id = 1 }).Select("o.*").ToList();
             Console.WriteLine("#### No Entity End ####");
         }
 

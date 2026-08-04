@@ -1,4 +1,5 @@
-﻿using Demo;
+using Demo;
+using SqlSeverTest;
 using SqlSeverTest.UserTestCases;
 using SqlSeverTest.UserTestCases.UnitTest;
 using SqlSugar;
@@ -33,6 +34,59 @@ namespace OrmTest
         }
         public static void Init()
         {
+            Unitetdgsatsdfaffa.Init();
+            UnitOneToOneDefault.Init();
+            UValidateExtensions.Init();
+            UUtilExtensions.Init();
+            UnitDateRange.Init();
+            UnitSFADSAFSY2.Init();
+            Unitsadsfasdfys.Init();
+            Unitsdfyasfs3lsss.Init();
+            Unitadsfasyss.Init();
+            Unitsadfasysss.Init();
+            Unitadfafassys.Init();
+            UnitArrayNavQuery.Init();
+            Unitdfasdfasfysa.Init();
+            UnitDefaultValueTest.Init();
+            Unitsdfayderqys.Init();
+            Unitsdfaysrs.Init();
+            Unitdslasdgy.Init();
+            Unitdafaaaaa.Init();
+            Unitdfafaa.Init();
+            Unitdasfyasdfa.Init();
+            Unitafdssfasydsfsf.Init();
+            Unitsdfadysdfa.Init();
+            Unitadfasdysdfa.Init();
+            Unitdfayssf.Init();
+            Unitdsfasdfys.Init();
+            Unitsadfasys.Init();
+            Unitsadfasys.Init();
+            Unitadfasfysdfyss.Init();
+            Unitsfasdyd.Init();
+            Unitafdsafsss.Init();
+            Unitdfdaysss.Init();
+            Unitdsfsssysf.Init();
+            Unitsdfadysssdf.Init();
+            UnitOneToMany123131.Init();
+            Unitadfasdys.Init();
+            Unitadfadfadfa.Init();
+            Unitsdfadsfsys.Init();
+            Unitadfasdysss.Init();
+            Unitdfafassfa.Init();
+            Unitasdfays.Init();
+            Unitsadfadsayss.Init();
+            Unitadfsa1ysfds.Init();
+            Unitdsadfays.Init();
+            UnitDADF231YAA.Init();
+            Unitadfasyya.Init();
+            Unitysadfay2.Init();
+            Unitdfaatsd2.Init();
+            Unityadfasasdfa.Init();
+            Unitsdfaafa.Init();
+            Unitadfayyadfa.Init();
+            Unitsdfa1231.Init();
+            Unitasxdfaaa.Init();
+            UnitSplitadfaf1.Init();
             Unitaadfas1.Init();
             Unitadfasda.Init();
             Unita3affafa.Init();
@@ -102,6 +156,8 @@ namespace OrmTest
             UCustom01.Init();
             UCustom02.Init();
             UCustom03.Init();
+            USugarRetry.Init();
+            //UnitUtilConvert.Init(); pull  unit test is  error
             Bulk();
             Filter();
             Insert();
@@ -115,6 +171,11 @@ namespace OrmTest
             Queryable();
             Queryable2();
             QueryableAsync();
+            SecurityParameterHandling();
+            ExceptionHandling();
+            AsyncInsert();
+            AsyncUpdate();
+            AsyncDelete();
             //Thread();
             //Thread2();
             //Thread3();

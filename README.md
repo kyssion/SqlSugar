@@ -13,8 +13,8 @@ Advantages: [Low code] [High performance] [Super simple] [Comprehensive features
 .net framework.net core3.1.ne5.net6.net7.net8 .net9 .net10
 
 ## Support database 
-MySql、SqlServer、Sqlite、Oracle 、 postgresql、达梦、
-人大金仓(国产推荐)、神通数据库、瀚高、Access 、OceanBase
+MySql、SqlServer、Sqlite、Oracle 、 postgresql、达梦、Mongodb
+人大金仓(国产推荐)、神通数据库、瀚高、Access DB2、DuckDb、Hana、OceanBase
 TDengine  QuestDb Clickhouse  MySqlConnector、华为 GaussDB 
 南大通用 GBase、MariaDB、Tidb、Odbc、Percona Server,
 Amazon Aurora、Azure Database for MySQL、
@@ -30,8 +30,8 @@ Amazon Aurora、Azure Database for MySQL、
 ##  Documentation
 |Other |Select  | Insert    | Update  | Delete| 
 | ----- | --------- | ----------- | ------- |------- |
- <a target="_blank" href="https://github.com/donet5/SqlSugar/wiki/NUGET">Nuget</a>| <a href="https://github.com/DotNetNext/SqlSugar/wiki/1.1--Query‐Simple">Query</a> | <a  target="_blank" href="https://github.com/DotNetNext/SqlSugar/wiki/3.Insert"> Insert </a> |<a  target="_blank" href="https://github.com/DotNetNext/SqlSugar/wiki/2.Update">Update</a>|    <a  target="_blank" href="https://github.com/DotNetNext/SqlSugar/wiki/4.Delete">Delete</a>    | 
-<a target="_blank" href="https://github.com/donet5/SqlSugar/wiki"> Start guide</a>  | <a target="_bank" href="https://github.com/DotNetNext/SqlSugar/wiki/1.2-Query%E2%80%90Join">Join query </a> |<a href="https://github.com/DotNetNext/SqlSugar/wiki/3.2-Dynamic-Insert">Insert without entity </a> | <a href="https://github.com/DotNetNext/SqlSugar/wiki/2.2-Dynamic-Update">Update without entity</a>  | <a href="https://www.donet5.com/Home/Doc?typeId=2424">  Delete without entity </a>   |     |
+ <a target="_blank" href="https://github.com/donet5/SqlSugar/wiki/NUGET">Nuget</a>| <a href="https://github.com/DotNetNext/SqlSugar/wiki/1.1--Query‐Simple">Query</a> | <a  target="_blank" href="https://github.com/DotNetNext/SqlSugar/wiki/3.Insert"> Insert </a> |<a  target="_blank" href="https://github.com/DotNetNext/SqlSugar/wiki/2.Update">Update</a>|    <a  target="_blank" href="https://github.com/DotNetNext/SqlSugar/wiki/4.1-Delete">Delete</a>    | 
+<a target="_blank" href="https://github.com/donet5/SqlSugar/wiki"> Start guide</a>  | <a target="_bank" href="https://github.com/DotNetNext/SqlSugar/wiki/1.2-Query%E2%80%90Join">Join query </a> |<a href="https://github.com/DotNetNext/SqlSugar/wiki/3.2-Dynamic-Insert">Insert without entity </a> | <a href="https://github.com/DotNetNext/SqlSugar/wiki/2.2-Dynamic-Update">Update without entity</a>  | <a href="https://github.com/DotNetNext/SqlSugar/wiki/4.2-Dynamic-Delete">  Delete without entity </a>   |     |
 |<a href="https://www.donet5.com/Home/Doc?typeId=2246">Multiple databases</a> | <a target="_bank" href="https://github.com/DotNetNext/SqlSugar/wiki/1.6-Query%E2%80%90Include">Include query</a>|<a target="_bank" href="https://www.donet5.com/Home/Doc?typeId=2430">Include Insert</a>| <a target="_bank" href="https://www.donet5.com/Home/Doc?typeId=2432">Include Update</a>| <a target="_bank" href="https://www.donet5.com/Home/Doc?typeId=2431">Include Delete</a> 
  |<a  href="https://www.donet5.com/Home/Doc"><font color="red">中文文档</font></a>|<a  href="https://www.donet5.com/Home/Doc?typeId=2244">Cross database query</a>|<a  href="https://www.donet5.com/Home/Doc?typeId=2420">Insert by json</a>|<a  href="https://www.donet5.com/Home/Doc?typeId=2420">Update by json</a>|<a  href="https://www.donet5.com/Home/Doc?typeId=2420">Delete by json</a>|
 

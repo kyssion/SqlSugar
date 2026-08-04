@@ -15,13 +15,13 @@ namespace SqlSugar.GBase
         public SqlSugarProvider Context { get; set; }
         public GBaseExpressionContext()
         {
-            base.DbMehtods = new GBaseMethod();
+            base.DbMehtods = new GBaseMethod(this);
         }
-        public override string SqlTranslationLeft { get { return ""; } }
-        public override string SqlTranslationRight { get { return ""; } }
+        public override string SqlTranslationLeft { get { return GBaseConfig.SqlTranslationLeft(this?.SugarContext?.Context); } }
+        public override string SqlTranslationRight { get { return GBaseConfig.SqlTranslationRight(this?.SugarContext?.Context); } }
         public override bool IsTranslationText(string name)
         {
-            var result = name.IsContainsIn( UtilConstants.Space,"(",")");
+            var result = name.IsContainsIn(UtilConstants.Space, "(", ")");
             return result;
         }
         public override string GetLimit() { return ""; }
@@ -40,12 +40,29 @@ namespace SqlSugar.GBase
     public partial class GBaseMethod : DefaultDbMethod, IDbMethods
     {
         private string _dateTimeType = "datetime year to fraction(5)";
+        public GBaseExpressionContext _expressionContext = null;
+
+        public GBaseMethod(GBaseExpressionContext context)
+        {
+            this._expressionContext = context;
+        }
+
         public override string Length(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
             return string.Format(" LENGTH({0}) ", parameter.MemberName);
         }
-
+        public override string ToBool(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            if (this._expressionContext != null &&
+                this._expressionContext.SugarContext != null &&
+                GBaseConfig.IsMySqlMode(this._expressionContext.SugarContext.Context))
+            {
+                return string.Format(" CAST({0} AS SIGNED)", parameter.MemberName);
+            }
+            return string.Format(" CAST({0} AS BOOLEAN)", parameter.MemberName);
+        }
         public override string IsNull(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
@@ -56,7 +73,7 @@ namespace SqlSugar.GBase
             {
                 if (parameter1.MemberValue.GetType() == UtilConstants.DateType)
                 {
-                    str += string.Format("::{0}", _dateTimeType);
+                    str = string.Format("NVL({0} {2},{1} {2})", parameter.MemberName, parameter1.MemberName, "::" + _dateTimeType);
                 }
             }
             return str;
@@ -73,11 +90,19 @@ namespace SqlSugar.GBase
         }
         public override string GetForXmlPath()
         {
-            return "  FOR XML PATH('')),1,len(N','),'')  ";
+            return string.Empty;
         }
         public override string GetStringJoinSelector(string result, string separator)
         {
-            return $"stuff((SELECT cast(N'{separator}' as nvarchar(max)) + cast({result} as nvarchar(max))";
+            if (separator.Trim() == ",")
+            {
+                return $" WM_CONCAT({result})";
+            }
+            else
+            {
+                string guid_separator = UtilConstants.ReplaceKey.Replace("{", "").Replace("}", "");
+                return $" REPLACE(REPLACE(WM_CONCAT('{guid_separator}' || {result}), ',{guid_separator}', '{separator}'), '{guid_separator}', '')";
+            }
         }
         public override string DateValue(MethodCallExpressionModel model)
         {
@@ -89,22 +114,28 @@ namespace SqlSugar.GBase
                 switch (parameter2.MemberValue.ToString().ToLower())
                 {
                     case "year":
-                        str = string.Format(" year('{0}'::{1}) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" year({0} :: {1}) ", parameter.MemberName, _dateTimeType);
+                        //str = string.Format(" to_char({0} :: {1},'yyyy')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "month":
-                        str = string.Format(" month('{0}'::{1}) ", parameter.MemberName, _dateTimeType);
+                        //str = string.Format(" month({0} :: {1}) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0} :: {1},'MM')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "day":
-                        str = string.Format(" day('{0}'::{1}) ", parameter.MemberName, _dateTimeType);
+                        //str = string.Format(" day({0} :: {1}) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0} :: {1},'dd')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "hour":
-                        str = string.Format(" extend('{0}'::{1}, hour to hour) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char('{0}' :: {1},'hh24') ", parameter.MemberName, _dateTimeType);
                         break;
                     case "minute":
-                        str = string.Format(" extend('{0}'::{1}, minute to minute) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char('{0}' :: {1},'mi') ", parameter.MemberName, _dateTimeType);
                         break;
                     case "second":
-                        str = string.Format(" extend('{0}'::{1}, second to second) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char('{0}' :: {1}, 'ss') ", parameter.MemberName, _dateTimeType);
+                        break;
+                    case "quarter":
+                        str = string.Format(" quarter({0}  ::  {1}) ", parameter.MemberName, _dateTimeType);
                         break;
                 }
             }
@@ -113,22 +144,28 @@ namespace SqlSugar.GBase
                 switch (parameter2.MemberValue.ToString().ToLower())
                 {
                     case "year":
-                        str = string.Format(" year({0}::{1}) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" year({0} :: {1}) ", parameter.MemberName, _dateTimeType);
+                        //str = string.Format(" to_char({0} :: {1},'yyyy')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "month":
-                        str = string.Format(" month({0}::{1}) ", parameter.MemberName, _dateTimeType);
+                        //str = string.Format(" month({0} :: {1}) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0} :: {1},'MM')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "day":
-                        str = string.Format(" day({0}::{1}) ", parameter.MemberName, _dateTimeType);
+                        //str = string.Format(" day({0} :: {1}) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0} :: {1},'dd')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "hour":
-                        str = string.Format(" extend({0}::{1}, hour to hour)::varchar(2) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0} :: {1},'hh24')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "minute":
-                        str = string.Format(" extend({0}::{1}, minute to minute)::varchar(2) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0} :: {1},'mi')  ", parameter.MemberName, _dateTimeType);
                         break;
                     case "second":
-                        str = string.Format(" extend({0}::{1}, second to second)::varchar(2) ", parameter.MemberName, _dateTimeType);
+                        str = string.Format(" to_char({0}  ::  {1}, 'ss') ", parameter.MemberName, _dateTimeType);
+                        break;
+                    case "quarter":
+                        str = string.Format(" quarter({0}  ::  {1}) ", parameter.MemberName, _dateTimeType);
                         break;
                 }
             }
@@ -179,12 +216,21 @@ namespace SqlSugar.GBase
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             var parameter3 = model.Args[2];
-            return string.Format(" DATEDIFF('{0}',{1},{2}) ", parameter.MemberValue?.ToString().ToSqlFilter(), parameter2.MemberName, parameter3.MemberName);
+            var intervalType = parameter.MemberValue?.ToString().ToSqlFilter()?.ToLower();
+            return string.Format(" timestampdiff('{0}',{1},{2}) ", intervalType, parameter2.MemberName, parameter3.MemberName);
         }
         public override string ToString(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
-            return string.Format(" CAST({0} AS NVARCHAR(4000))", parameter.MemberName);
+
+            if (parameter.MemberName.ToString().Contains("datetime year to fraction(5)"))
+            {
+                return string.Format(" CAST({0} AS NVARCHAR(4))", parameter.MemberName);
+            }
+            else
+            {
+                return string.Format(" CAST({0} AS NVARCHAR(4000))", parameter.MemberName);
+            }
         }
 
         public override string EqualTrue(string fieldName)
@@ -227,6 +273,11 @@ namespace SqlSugar.GBase
             }
 
             return str;
+        }
+
+        public override string WeekOfYear(MethodCallExpressionModel mode)
+        {
+            return string.Format("lpad(week({0}  ::  {1},1),2,'0') ", mode.Args[0].MemberName, _dateTimeType);
         }
     }
 }

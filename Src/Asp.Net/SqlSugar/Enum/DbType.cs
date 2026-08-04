@@ -33,6 +33,13 @@ namespace SqlSugar
         Doris,
         Xugu,
         GoldenDB,
+        TDSQLForPGODBC, 
+        TDSQL,
+        HANA,
+        DB2,
+        GaussDBNative,
+        DuckDB,
+        MongoDb,
         Custom =900
     }
 }

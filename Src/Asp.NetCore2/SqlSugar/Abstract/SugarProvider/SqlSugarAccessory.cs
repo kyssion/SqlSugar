@@ -497,6 +497,14 @@ namespace SqlSugar
                     Check.Exception(SugarCompatible.IsFramework, "OceanBaseForOracle only support .net core");
                     InstanceFactory.CustomDllName = SugarCompatible.IsFramework ? "SqlSugar.OceanBaseForOracle" : "SqlSugar.OceanBaseForOracleCore";
                     break;
+                case DbType.TDSQLForPGODBC:
+                    Check.Exception(SugarCompatible.IsFramework, "TDSQLForPGODBC only support .net core");
+                    InstanceFactory.CustomDllName = SugarCompatible.IsFramework ? "SqlSugar.TDSQLForPGODBC" : "SqlSugar.TDSQLForPGODBC";
+                    break;
+                case DbType.TDSQLForOracleODBC:
+                    Check.Exception(SugarCompatible.IsFramework, "TDSQLForOracleODBC only support .net core");
+                    InstanceFactory.CustomDllName = SugarCompatible.IsFramework ? "SqlSugar.TDSQLForOracleODBC" : "SqlSugar.TDSQLForOracleODBC";
+                    break;
                 case DbType.GaussDB:
                     config.DbType = DbType.PostgreSQL;
                     if (this.CurrentConnectionConfig.MoreSettings == null)
@@ -507,15 +515,35 @@ namespace SqlSugar
                     config.DbType = DbType.PostgreSQL;
                     if (this.CurrentConnectionConfig.MoreSettings==null) 
                         this.CurrentConnectionConfig.MoreSettings = new ConnMoreSettings();
+                    if (this.CurrentConnectionConfig.MoreSettings.DatabaseModel == DbType.MySql)
+                    {
+                        this.CurrentConnectionConfig.MoreSettings.InnerTemp = DbType.MySql;
+                    }
+                    else if (this.CurrentConnectionConfig.MoreSettings.DatabaseModel == DbType.PostgreSQL)
+                    {
+                        this.CurrentConnectionConfig.MoreSettings.InnerTemp = DbType.PostgreSQL;
+                    }
                     this.CurrentConnectionConfig.MoreSettings.DatabaseModel = DbType.Vastbase;
                     break;
                 case DbType.OceanBase:
-                    config.DbType = DbType.MySql; 
+                    config.DbType = DbType.MySql;
+                    if (this.CurrentConnectionConfig.MoreSettings == null)
+                        this.CurrentConnectionConfig.MoreSettings = new ConnMoreSettings();
+                    this.CurrentConnectionConfig.MoreSettings.DatabaseModel = DbType.OceanBase;
                     break;
                 case DbType.Tidb:
                     config.DbType = DbType.MySql;
+                    if (this.CurrentConnectionConfig.MoreSettings == null)
+                        this.CurrentConnectionConfig.MoreSettings = new ConnMoreSettings();
+                    this.CurrentConnectionConfig.MoreSettings.DatabaseModel = DbType.Tidb;
                     break;
                 case DbType.PolarDB:
+                    config.DbType = DbType.MySql;
+                    if (this.CurrentConnectionConfig.MoreSettings == null)
+                        this.CurrentConnectionConfig.MoreSettings = new ConnMoreSettings();
+                    this.CurrentConnectionConfig.MoreSettings.DatabaseModel = DbType.PolarDB;
+                    break;
+                case DbType.TDSQL:
                     config.DbType = DbType.MySql;
                     break;
                 case DbType.Doris:
@@ -523,10 +551,15 @@ namespace SqlSugar
                     if (this.CurrentConnectionConfig.MoreSettings == null)
                         this.CurrentConnectionConfig.MoreSettings = new ConnMoreSettings();
                     this.CurrentConnectionConfig.MoreSettings.DatabaseModel = DbType.Doris;
+                    this.CurrentConnectionConfig.MoreSettings.DisableNvarchar = true;
                     break;
                 case DbType.TDengine:
                     Check.Exception(SugarCompatible.IsFramework, "TDengine only support .net core");
                     InstanceFactory.CustomDllName = SugarCompatible.IsFramework ? "SqlSugar.TDengine" : "SqlSugar.TDengineCore";
+                    break;
+                case DbType.HANA:
+                    Check.Exception(SugarCompatible.IsFramework, "NANA only support .net core");
+                    InstanceFactory.CustomDllName = "SqlSugar.HANAConnector";
                     break;
                 case DbType.Xugu:
                     Check.Exception(SugarCompatible.IsFramework, "Xugu only support .net core");
@@ -536,6 +569,20 @@ namespace SqlSugar
                     break;
                 case DbType.GoldenDB:
                     config.DbType = DbType.MySql;
+                    break;
+                case DbType.DB2:
+                    Check.Exception(SugarCompatible.IsFramework, "Db2 only support .net core");
+                    InstanceFactory.CustomDllName = "SqlSugar.Db2Core";
+                    break;
+                case DbType.GaussDBNative:
+                    Check.Exception(SugarCompatible.IsFramework, "GaussDBNative only support .net core");
+                    InstanceFactory.CustomDllName = "SqlSugar.GaussDBCore";
+                    break;
+                case DbType.DuckDB:
+                    InstanceFactory.CustomDllName = SugarCompatible.IsFramework ? throw new Exception("Only.NET CORE is supported") : "SqlSugar.DuckDBCore";
+                    break;
+                case DbType.MongoDb:
+                    InstanceFactory.CustomDllName = SugarCompatible.IsFramework ? throw new Exception("Only.NET CORE is supported") : "SqlSugar.MongoDbCore";
                     break;
                 default:
                     throw new Exception("ConnectionConfig.DbType is null");

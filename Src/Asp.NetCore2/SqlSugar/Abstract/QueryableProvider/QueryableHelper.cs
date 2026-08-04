@@ -13,7 +13,7 @@ using System.Collections.ObjectModel;
 using NetTaste;
 using Newtonsoft.Json.Linq;
 using System.Xml.Linq;
-using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices; 
 
 
 namespace SqlSugar
@@ -403,7 +403,13 @@ namespace SqlSugar
             ToSqlBefore();
             sql = QueryBuilder.ToSqlString();
             sql = QueryBuilder.ToCountSql(sql);
+            var oldIsDisableMasterSlaveSeparation = this.Context.Ado.IsDisableMasterSlaveSeparation;
+            if (this.QueryBuilder.IsDisableMasterSlaveSeparation) 
+            {
+                this.Context.Ado.IsDisableMasterSlaveSeparation = true;
+            }
             var result = Context.Ado.GetInt(sql, QueryBuilder.Parameters.ToArray());
+            this.Context.Ado.IsDisableMasterSlaveSeparation = oldIsDisableMasterSlaveSeparation;
             return result;
         }
         protected async Task<int> GetCountAsync()
@@ -662,7 +668,11 @@ namespace SqlSugar
                     var name2Column = entityColumns.FirstOrDefault(it => it.PropertyName == name2);
                     if (name1Column != null)
                     {
-                        if (!navInfo.AppendProperties.ContainsKey(name1Column.PropertyName))
+                        if (navColumn.Navigat.NavigatType == NavigateType.OneToMany&& name1Column.DbColumnName==null)
+                        {
+                            //empty
+                        }
+                        else if (!navInfo.AppendProperties.ContainsKey(name1Column.PropertyName))
                             navInfo.AppendProperties.Add(name1Column.PropertyName, name1Column.DbColumnName);
                     }
                     if (name2Column != null)
@@ -685,6 +695,16 @@ namespace SqlSugar
                             }
                         }  
                     }
+                }
+                else if (navColumn != null && navColumn.Navigat.NavigatType == NavigateType.ManyToMany)
+                {
+                    var name1 = navColumn.Navigat.AClassId; 
+                    var name1Column = entityColumns.FirstOrDefault(it => it.PropertyName == name1); 
+                    if (name1Column != null)
+                    {
+                        if (!navInfo.AppendProperties.ContainsKey(name1Column.PropertyName))
+                            navInfo.AppendProperties.Add(name1Column.PropertyName, name1Column.DbColumnName);
+                    }  
                 }
             }
         }
@@ -828,9 +848,9 @@ namespace SqlSugar
                 {
                     var propertyName = kv.Key.Replace("SugarNav_", "");
                     var propertyInfo = columns.First(i => i.PropertyName == propertyName).PropertyInfo;
-                    if (kv.Value is decimal &&UtilMethods.GetUnderType(propertyInfo.PropertyType).IsIn(typeof(int), typeof(long)))
+                    if (kv.Value is decimal && UtilMethods.GetUnderType(propertyInfo.PropertyType).IsIn(typeof(int), typeof(long)))
                     {
-                   
+
                         var changeValue = UtilMethods.ChangeType2(kv.Value, propertyInfo.PropertyType);
                         propertyInfo.SetValue(addItem, changeValue);
                     }
@@ -842,7 +862,7 @@ namespace SqlSugar
                     }
                     else if (kv.Value == DBNull.Value)
                     {
-                        propertyInfo.SetValue(addItem,null);
+                        propertyInfo.SetValue(addItem, null);
                     }
                     else if (UtilMethods.GetUnderType(propertyInfo.PropertyType) == typeof(Guid) && kv.Value is string)
                     {
@@ -851,6 +871,19 @@ namespace SqlSugar
                     else if (UtilMethods.GetUnderType(propertyInfo.PropertyType) == typeof(int) && kv.Value is long)
                     {
                         propertyInfo.SetValue(addItem, Convert.ToInt32(kv.Value));
+                    }
+                    else if (propertyInfo.PropertyType.FullName == "System.Ulid") 
+                    {
+                        propertyInfo.SetValue(addItem,UtilMethods.To( kv.Value, propertyInfo.PropertyType));
+                    }
+                    else if (kv.Value is string s&&
+                             s!=null&&
+                             s?.StartsWith("[")==true&&
+                             s?.EndsWith("]") == true&&
+                             UtilMethods.IsArrayOrList(propertyInfo.PropertyType)
+                             )
+                    {
+                        propertyInfo.SetValue(addItem,  UtilMethods.ConvertToArray(kv.Value?.ToString(), propertyInfo.PropertyType));
                     }
                     else
                     {
@@ -1527,7 +1560,7 @@ namespace SqlSugar
             //return sql;
         }
 
-        internal JoinQueryInfo GetJoinInfo(Expression joinExpression, JoinType joinType)
+        public virtual JoinQueryInfo GetJoinInfo(Expression joinExpression, JoinType joinType)
         {
             QueryBuilder.CheckExpressionNew(joinExpression, "Join");
             QueryBuilder.JoinExpression = joinExpression;
@@ -1574,7 +1607,18 @@ namespace SqlSugar
                     var tableinfo = this.QueryBuilder.AsTables.First();
                     if (this.QueryBuilder.TableWithString != SqlWith.Null && this.Context.CurrentConnectionConfig?.MoreSettings?.IsWithNoLockQuery == true && this.QueryBuilder.AsTables.First().Value.ObjToString().Contains(SqlWith.NoLock) == false)
                     {
-                        this.QueryBuilder.AsTables[tableinfo.Key] = " (SELECT * FROM " + this.QueryBuilder.AsTables.First().Value + $" {SqlWith.NoLock} )";
+                        if (this.QueryBuilder.AsTables.First().Value.EndsWith(") unionTable "))
+                        {
+                            this.QueryBuilder.AsTables[tableinfo.Key] = " (SELECT * FROM " + this.QueryBuilder.AsTables.First().Value + ")";
+                        }
+                        else if (this.QueryBuilder.AsTables.First().Value.EndsWith(") MergeTable "))
+                        {
+                            this.QueryBuilder.AsTables[tableinfo.Key] = " (SELECT * FROM " + this.QueryBuilder.AsTables.First().Value + ")";
+                        }
+                        else
+                        {
+                            this.QueryBuilder.AsTables[tableinfo.Key] = " (SELECT * FROM " + this.QueryBuilder.AsTables.First().Value + $" {SqlWith.NoLock} )";
+                        }
                     }
                     else if (this.QueryBuilder.IsSqlQuery && this.QueryBuilder.AsTables.First().Value.ObjToString().StartsWith("("))
                     {
@@ -1716,6 +1760,8 @@ namespace SqlSugar
         }
         protected ISugarQueryable<T> _GroupBy(Expression expression)
         {
+            var oldParameterNames = this.QueryBuilder.Parameters?.Select(it => it.ParameterName)
+                ?.ToList();
             QueryBuilder.CheckExpression(expression, "GroupBy");
             LambdaExpression lambda = expression as LambdaExpression;
             expression = lambda.Body;
@@ -1746,7 +1792,45 @@ namespace SqlSugar
                 lamResult = QueryBuilder.GetExpressionValue(expression, isSingle ? ResolveExpressType.FieldSingle : ResolveExpressType.FieldMultiple);
                 result = lamResult.GetResultString(); 
             }
-            GroupBy(result);
+            if (oldParameterNames != null && this.Context.CurrentConnectionConfig.DbType == DbType.SqlServer)
+            {
+                var newParas = this.QueryBuilder.Parameters.Where(it => !oldParameterNames.Contains(it.ParameterName)).ToList();
+                this.QueryBuilder.GroupParameters = newParas;
+                var groupBySql = UtilMethods.GetSqlString(DbType.SqlServer, result, newParas.ToArray());
+                this.QueryBuilder.GroupBySql = groupBySql;
+                this.QueryBuilder.GroupBySqlOld = result;
+
+                if (expression is NewExpression s && s.Arguments.Count > 1)
+                {
+                    foreach (var item in s.Arguments)
+                    { 
+                            var q = this.Context.Queryable<object>().QueryBuilder;
+                            var resolveExpressType = isSingle ? ResolveExpressType.FieldSingle : ResolveExpressType.WhereMultiple;
+                            if(item is MemberExpression&&resolveExpressType == ResolveExpressType.WhereMultiple) 
+                            {
+                               resolveExpressType = ResolveExpressType.FieldMultiple;
+                            }
+                            var itemObj= q.GetExpressionValue(item, resolveExpressType).GetResultString();
+                            if (q.Parameters.Any())
+                            {
+                                var itemGroupBySql = UtilMethods.GetSqlString(DbType.SqlServer, itemObj, q.Parameters.ToArray());
+                                this.QueryBuilder.GroupBySql = itemGroupBySql;
+                                this.QueryBuilder.GroupBySqlOld = itemGroupBySql;
+                                this.GroupBy(itemGroupBySql);
+                            }
+                            else
+                            {
+                                this.GroupBy(itemObj);
+                            } 
+                    }
+                    return this;
+                }
+                GroupBy(result);
+            }
+            else
+            {
+                GroupBy(result);
+            }
             return this;
         }
         protected ISugarQueryable<T> _As(string tableName, string entityName)
@@ -1768,9 +1852,9 @@ namespace SqlSugar
         protected void _Filter(string FilterName, bool isDisabledGobalFilter)
         {
             QueryBuilder.IsDisabledGobalFilter = isDisabledGobalFilter;
-            if (this.Context.QueryFilter.GeFilterList.HasValue() && FilterName.HasValue())
+            if (this.Context.QueryFilter.GetFilterList.HasValue() && FilterName.HasValue())
             {
-                var list = this.Context.QueryFilter.GeFilterList.Where(it => it.FilterName == FilterName && it.IsJoinQuery == !QueryBuilder.IsSingle());
+                var list = this.Context.QueryFilter.GetFilterList.Where(it => it.FilterName == FilterName && it.IsJoinQuery == !QueryBuilder.IsSingle());
                 foreach (var item in list)
                 {
                     var filterResult = item.FilterValue(this.Context);
@@ -1870,8 +1954,19 @@ namespace SqlSugar
             var entityType = typeof(TResult);
             bool isChangeQueryableSlave = GetIsSlaveQuery();
             bool isChangeQueryableMasterSlave = GetIsMasterQuery();
-            var dataReader = this.Db.GetDataReader(sqlObj.Key, sqlObj.Value.ToArray());
-            result = GetData<TResult>(isComplexModel, entityType, dataReader);
+            string sqlString = sqlObj.Key;
+            SugarParameter[] parameters = sqlObj.Value.ToArray();
+            var dataReader = this.Db.GetDataReader(sqlString, parameters);
+            this.Db.GetDataBefore(sqlString, parameters);
+            if (entityType.IsInterface)
+            {
+                result = GetData<TResult>(isComplexModel, this.QueryBuilder.AsType, dataReader);
+            }
+            else
+            {
+                result = GetData<TResult>(isComplexModel, entityType, dataReader);
+            }
+            this.Db.GetDataAfter(sqlString, parameters);
             RestChangeMasterQuery(isChangeQueryableMasterSlave);
             RestChangeSlaveQuery(isChangeQueryableSlave);
             return result;
@@ -1883,8 +1978,19 @@ namespace SqlSugar
             var entityType = typeof(TResult);
             bool isChangeQueryableSlave = GetIsSlaveQuery();
             bool isChangeQueryableMasterSlave = GetIsMasterQuery();
-            var dataReader = await this.Db.GetDataReaderAsync(sqlObj.Key, sqlObj.Value.ToArray());
-            result = await GetDataAsync<TResult>(isComplexModel, entityType, dataReader);
+            string sqlString = sqlObj.Key;
+            SugarParameter[] parameters = sqlObj.Value.ToArray();
+            var dataReader = await this.Db.GetDataReaderAsync(sqlString, parameters);
+            this.Db.GetDataBefore(sqlString, parameters);
+            if (entityType.IsInterface)
+            {
+                result =await GetDataAsync<TResult>(isComplexModel, this.QueryBuilder.AsType, dataReader);
+            }
+            else
+            {
+                result = await GetDataAsync<TResult>(isComplexModel, entityType, dataReader);
+            }
+            this.Db.GetDataAfter(sqlString, parameters);
             RestChangeMasterQuery(isChangeQueryableMasterSlave);
             RestChangeSlaveQuery(isChangeQueryableSlave);
             return result;
@@ -2087,6 +2193,7 @@ namespace SqlSugar
             asyncQueryableBuilder.JoinExpression = this.QueryBuilder.JoinExpression;
             asyncQueryableBuilder.WhereIndex = this.QueryBuilder.WhereIndex;
             asyncQueryableBuilder.HavingInfos = this.QueryBuilder.HavingInfos;
+            asyncQueryableBuilder.AsType = this.QueryBuilder.AsType;
             asyncQueryableBuilder.LambdaExpressions.ParameterIndex = this.QueryBuilder.LambdaExpressions.ParameterIndex;
             asyncQueryableBuilder.IgnoreColumns = this.Context.Utilities.TranslateCopy(this.QueryBuilder.IgnoreColumns);
             asyncQueryableBuilder.AsTables = this.Context.Utilities.TranslateCopy(this.QueryBuilder.AsTables);
@@ -2104,6 +2211,9 @@ namespace SqlSugar
             asyncQueryableBuilder.Hints = this.QueryBuilder.Hints;
             asyncQueryableBuilder.MasterDbTableName = this.QueryBuilder.MasterDbTableName;
             asyncQueryableBuilder.IsParameterizedConstructor = this.QueryBuilder.IsParameterizedConstructor;
+            asyncQueryableBuilder.GroupParameters = this.QueryBuilder.GroupParameters;
+            asyncQueryableBuilder.GroupBySql = this.QueryBuilder.GroupBySql;
+            asyncQueryableBuilder.GroupBySqlOld = this.QueryBuilder.GroupBySqlOld;
             if (this.QueryBuilder.AppendNavInfo != null)
             {
                 asyncQueryableBuilder.AppendNavInfo = new AppendNavInfo() 
@@ -2297,7 +2407,13 @@ namespace SqlSugar
                     var p = new SugarParameter[] {
                             new SugarParameter("@p",re.Value)
                         };
-                    var value = UtilMethods.GetSqlString(config.DbType, "@p", p, true);
+                    var isNvarchar = true;
+                    if (this.Context.CurrentConnectionConfig?.DbType == DbType.SqlServer
+                        &&this.Context.CurrentConnectionConfig?.MoreSettings?.DisableNvarchar!=true) 
+                    {
+                        isNvarchar = false;
+                    }
+                    var value = UtilMethods.GetSqlString(config.DbType, "@p", p, isNvarchar);
                     sql = sql.Replace(re.Name, value);
                
                 }
@@ -2328,8 +2444,17 @@ namespace SqlSugar
                  new QueryableAppendColumn(){ Name="sugarIndex",AsName="sugarIndex" }
                 };
             this.QueryBuilder.AppendValues = null;
+            var isNavQuery = this.QueryBuilder.Includes != null;
+            if (isNavQuery)
+            {
+                this.Context.Ado.DbBind.QueryBuilder.AppendColumns = this.QueryBuilder.AppendColumns;
+            }
             var subList = ExpressionBuilderHelper.CallFunc(callType, methodParamters, this.Clone(), "SubQueryList");
             var appendValue = this.QueryBuilder.AppendValues;
+            if (isNavQuery)
+            {
+                appendValue = this.Context.Ado.DbBind.QueryBuilder.AppendValues;
+            }
             var list = (subList as IEnumerable).Cast<object>().ToList();
             if (isFirst && !typeof(TResult).IsAnonymousType())
             {

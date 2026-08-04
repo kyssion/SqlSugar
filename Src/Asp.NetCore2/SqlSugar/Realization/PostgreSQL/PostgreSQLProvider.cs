@@ -98,6 +98,10 @@ namespace SqlSugar
             var isVarchar = this.Context.IsVarchar();
             foreach (var parameter in parameters)
             {
+                if (parameter.DbType==System.Data.DbType.Int64&&parameter.Value?.Equals("Result%")==true) 
+                {
+                    parameter.DbType = System.Data.DbType.AnsiString;
+                }
                 UNumber(parameter);
                 if (parameter.Value == null) parameter.Value = DBNull.Value;
                 if (parameter.Value is System.Data.SqlTypes.SqlDateTime && parameter.DbType == System.Data.DbType.AnsiString)
@@ -142,6 +146,20 @@ namespace SqlSugar
                 if (parameter.CustomDbType != null&& parameter.CustomDbType is NpgsqlDbType)
                 {
                     sqlParameter.NpgsqlDbType =((NpgsqlDbType)parameter.CustomDbType);
+                }
+                else
+                {
+                    switch (parameter.Value)
+                    {
+                        case NpgsqlBox b: sqlParameter.NpgsqlDbType = NpgsqlDbType.Box; break;
+                        case NpgsqlCircle c: sqlParameter.NpgsqlDbType = NpgsqlDbType.Circle; break;
+                        case NpgsqlLine l: sqlParameter.NpgsqlDbType = NpgsqlDbType.Line; break;
+                        case NpgsqlLSeg s: sqlParameter.NpgsqlDbType = NpgsqlDbType.LSeg; break;
+                        case NpgsqlPath p: sqlParameter.NpgsqlDbType = NpgsqlDbType.Path; break;
+                        case NpgsqlPoint p: sqlParameter.NpgsqlDbType = NpgsqlDbType.Point; break;
+                        case NpgsqlPolygon p: sqlParameter.NpgsqlDbType = NpgsqlDbType.Polygon; break;
+                        default: break;
+                    }
                 }
             }
             return result;
@@ -246,6 +264,7 @@ namespace SqlSugar
             { typeof(short[]),NpgsqlDbType.Smallint},
             { typeof(long[]),NpgsqlDbType.Bigint},
             { typeof(decimal[]),NpgsqlDbType.Numeric},
+            { typeof(double[]),NpgsqlDbType.Double},
             { typeof(char[]),NpgsqlDbType.Text},
             { typeof(byte[]),NpgsqlDbType.Bytea},
             { typeof(bool[]),NpgsqlDbType.Boolean},
@@ -258,6 +277,7 @@ namespace SqlSugar
             { typeof(short?[]),NpgsqlDbType.Smallint},
             { typeof(long?[]),NpgsqlDbType.Bigint},
             { typeof(decimal?[]),NpgsqlDbType.Numeric},
+            { typeof(double?[]),NpgsqlDbType.Double},
             { typeof(char?[]),NpgsqlDbType.Text},
             { typeof(byte?[]),NpgsqlDbType.Bytea},
             { typeof(bool?[]),NpgsqlDbType.Boolean},

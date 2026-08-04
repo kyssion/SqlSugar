@@ -1,5 +1,7 @@
-﻿using System;
+﻿using SqlSugar.DbConvert;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;
@@ -307,6 +309,15 @@ namespace SqlSugar
                         else
                         {
                             whereString += Builder.GetTranslationColumnName(item) + "=" + this.Context.Ado.SqlParameterKeyWord + item;
+                            var columnInfo = GetColumnInfo(item);
+                            if (columnInfo != null&&columnInfo.SqlParameterDbType is System.Data.DbType valueDbType) 
+                            {
+                                var p=this.Parameters?.FirstOrDefault(it => it.ParameterName == this.Context.Ado.SqlParameterKeyWord + item);
+                                if (p != null) 
+                                {
+                                    p.DbType = valueDbType;
+                                }
+                            }
                         }
                     }
                 }
@@ -329,7 +340,7 @@ namespace SqlSugar
 
         private EntityColumnInfo GetColumnInfo(string item)
         {
-            var columnInfo= this.EntityInfo?.Columns?.FirstOrDefault(it => it.DbColumnName.Equals(item) || it.PropertyName.Equals(item));
+            var columnInfo= this.EntityInfo?.Columns?.FirstOrDefault(it => it.DbColumnName.EqualCase(item) || it.PropertyName.EqualCase(item));
             return columnInfo;
         }
 
@@ -425,6 +436,10 @@ namespace SqlSugar
                 }
                 else if (UtilMethods.IsNumber(type.Name)) 
                 {
+                    if (value is decimal v) 
+                    { 
+                        return v.ToString(CultureInfo.InvariantCulture);
+                    }
                     if (value.ObjToString().Contains(","))
                     {
                         return $"'{value}'";
@@ -453,16 +468,16 @@ namespace SqlSugar
             {
                 return LambdaExpressions.DbMehtods.GetDate();
             }
-            else if (columnInfo.PropertyType.FullName == "NetTopologySuite.Geometries.Geometry") 
+            else if (columnInfo.PropertyType.FullName == "NetTopologySuite.Geometries.Geometry")
             {
                 var pname = Builder.SqlParameterKeyWord + "Geometry" + GetDbColumnIndex;
                 var p = new SugarParameter(pname, columnInfo.Value);
-                p.DbType= System.Data.DbType.Object;
+                p.DbType = System.Data.DbType.Object;
                 this.Parameters.Add(p);
                 GetDbColumnIndex++;
                 return pname;
             }
-            else if (UtilMethods.IsErrorDecimalString() == true)
+            else if ((columnInfo.Value is decimal || columnInfo.Value is double || columnInfo.Value is float) && UtilMethods.IsErrorDecimalString() == true)
             {
                 var pname = Builder.SqlParameterKeyWord + "Decimal" + GetDbColumnIndex;
                 var p = new SugarParameter(pname, columnInfo.Value);
@@ -496,13 +511,21 @@ namespace SqlSugar
                 }
                 return columnInfo.UpdateSql;
             }
-            else if (columnInfo.SqlParameterDbType is Type && (Type)columnInfo.SqlParameterDbType == UtilConstants.SqlConvertType)
+            else if (columnInfo.SqlParameterDbType is Type && IsNoParameterConvert(columnInfo))
             {
                 var type = columnInfo.SqlParameterDbType as Type;
                 var ParameterConverter = type.GetMethod("ParameterConverter").MakeGenericMethod(typeof(string));
                 var obj = Activator.CreateInstance(type);
                 var p = ParameterConverter.Invoke(obj, new object[] { columnInfo.Value, GetDbColumnIndex }) as SugarParameter;
                 return p.ParameterName;
+            }
+            else if (columnInfo.SqlParameterDbType is Type t && t == typeof(EnumToStringConvert) && this.Context?.CurrentConnectionConfig?.MoreSettings?.TableEnumIsString == true)
+            {
+                var pname = Builder.SqlParameterKeyWord + $"{columnInfo.PropertyName}_str" + GetDbColumnIndex;
+                var p = new SugarParameter(pname, columnInfo.Value);
+                this.Parameters.Add(p);
+                GetDbColumnIndex++;
+                return pname;
             }
             else if (columnInfo.SqlParameterDbType is Type)
             {
@@ -559,6 +582,20 @@ namespace SqlSugar
                 return name + "";
             }
         }
+
+        private static bool IsNoParameterConvert(DbColumnInfo columnInfo)
+        {
+            if (columnInfo.SqlParameterDbType is Type t)
+            {
+                var isAssignableFrom = typeof(DbConvert.NoParameterCommonPropertyConvert).IsAssignableFrom(t);
+                if (isAssignableFrom)
+                {
+                    return isAssignableFrom;
+                }
+            }
+            return (Type)columnInfo.SqlParameterDbType == UtilConstants.SqlConvertType;
+        }
+
         private bool IsSingleSetExp(DbColumnInfo columnInfo) 
         {
             return this.ReSetValueBySqlExpList != null && 

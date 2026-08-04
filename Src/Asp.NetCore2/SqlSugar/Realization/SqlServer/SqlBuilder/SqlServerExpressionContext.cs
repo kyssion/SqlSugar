@@ -20,6 +20,11 @@ namespace SqlSugar
     }
     public partial class SqlServerMethod : DefaultDbMethod, IDbMethods
     {
+        public override string UNIX_TIMESTAMP(MethodCallExpressionModel model)
+        {
+            var parameterNameA = model.Args[0].MemberName;
+            return $" DATEDIFF(SECOND, '1970-01-01', {parameterNameA}) ";
+        }
         public override string ToDecimal(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
@@ -56,7 +61,16 @@ namespace SqlSugar
         }
         public override string GetStringJoinSelector(string result, string separator)
         {
-            return $"stuff((SELECT cast(N'{separator}' as nvarchar(max)) + cast({result} as nvarchar(max))";
+            if (result.ObjToString().Trim().StartsWith("DISTINCT ", StringComparison.OrdinalIgnoreCase))
+            {
+                int index = result.IndexOf(result, StringComparison.Ordinal); // 找到去掉前缀空格后的位置
+                result= result.Substring(index + 9); // 9 是 "DISTINCT " 的长度
+                return $"stuff((SELECT DISTINCT cast(N'{separator}' as nvarchar(max)) + cast({result} as nvarchar(max))";
+            }
+            else
+            {
+                return $"stuff((SELECT cast(N'{separator}' as nvarchar(max)) + cast({result} as nvarchar(max))";
+            }
         }
         public override string DateValue(MethodCallExpressionModel model)
         {
@@ -88,6 +102,11 @@ namespace SqlSugar
         public override string HasValue(MethodCallExpressionModel model)
         {
             if (model.Args[0].Type == UtilConstants.GuidType)
+            {
+                var parameter = model.Args[0];
+                return string.Format("( {0} IS NOT NULL )", parameter.MemberName);
+            }
+            else if (model.Args[0].Type.IsIn(UtilConstants.DobType,UtilConstants.DecType, UtilConstants.DateTimeOffsetType, UtilConstants.DateType))
             {
                 var parameter = model.Args[0];
                 return string.Format("( {0} IS NOT NULL )", parameter.MemberName);
@@ -127,7 +146,14 @@ namespace SqlSugar
 
         private string GetJson(object memberName1, object memberName2, bool isLast)
         {
-            return $"JSON_VALUE({memberName1}, '$.'+"+memberName2+")";
+            if (isLast)
+            {
+                return $"JSON_VALUE({memberName1}, '$.'+" + memberName2 + ")";
+            }
+            else 
+            {
+                return $"JSON_QUERY({memberName1}, '$.'+" + memberName2 + ")";
+            }
         }
 
         public override string JsonListObjectAny(MethodCallExpressionModel model)

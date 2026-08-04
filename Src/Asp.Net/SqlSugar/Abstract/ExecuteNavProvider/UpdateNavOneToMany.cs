@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -137,6 +138,10 @@ namespace SqlSugar
                     }
                     children.AddRange(childs);
                 }
+                else if (childs == null && parentNavigateProperty.PropertyInfo.GetValue(item) is IList ilist && ilist != null && ilist.Count > 0)
+                {
+                    childs = GetIChildsBylList(children, thisFkColumn, parentValue, ilist);
+                }
                 ids.Add(parentValue);
                 if (_Options?.OneToManyNoDeleteNull == true && childs == null)
                 {
@@ -172,14 +177,13 @@ namespace SqlSugar
                 {
                     if (this._Context?.CurrentConnectionConfig?.MoreSettings?.IsAutoDeleteQueryFilter == true)
                     {
-                        this._Context.Deleteable<object>()
-                           .AS(thisEntity.DbTableName)
-                           .EnableQueryFilter(thisEntity.Type)
+                        this._Context.Deleteable<TChild>()
+                           .AS(thisEntity.DbTableName) 
                            .In(thisFkColumn.DbColumnName, ids.Distinct().ToList()).ExecuteCommand();
                     }
                     else
                     {
-                        this._Context.Deleteable<object>()
+                        this._Context.Deleteable<TChild>()
                             .AS(thisEntity.DbTableName) 
                             .In(thisFkColumn.DbColumnName, ids.Distinct().ToList()).ExecuteCommand();
                     }
@@ -193,6 +197,16 @@ namespace SqlSugar
             }
             _NavigateType = null;
             SetNewParent<TChild>(thisEntity, thisPkColumn);
+        }
+        private static List<TChild> GetIChildsBylList<TChild>(List<TChild> children, EntityColumnInfo thisFkColumn, object parentValue, IList ilist) where TChild : class, new()
+        {
+            List<TChild> childs = ilist.Cast<TChild>().ToList();
+            foreach (var child in childs)
+            {
+                thisFkColumn.PropertyInfo.SetValue(child, parentValue, null);
+            }
+            children.AddRange(childs);
+            return childs;
         }
 
         private static bool ParentIsPk(EntityColumnInfo parentNavigateProperty)

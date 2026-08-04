@@ -10,7 +10,17 @@ namespace SqlSugar
     public static partial class IDataRecordExtensions
     {
 
-        #region Common Extensions
+        #region Common Extensions 
+        public static Func<object, Type, object> DeserializeObjectFunc { get; internal set; }
+
+        public static T GetDeserializeObject<T>(this IDataReader dr, int i)
+        {
+            var obj = dr.GetValue(i);
+            if (obj == null)
+                return default(T);
+            var value = obj;
+            return (T)DeserializeObjectFunc(value, typeof(T));
+        }
         public static XElement GetXelement(this IDataRecord dr, int i) 
         {
             var result = XElement.Parse(dr.GetString(i).ToString());
@@ -141,7 +151,7 @@ namespace SqlSugar
             }
             if (dr.GetDataTypeName(i) == "NUMBER") 
             {
-               return Convert.ToInt32(dr.GetDouble(i));
+               return Convert.ToInt32(dr.GetDecimal(i));
             }
             var result = dr.GetInt32(i);
             return result;
@@ -150,7 +160,7 @@ namespace SqlSugar
         { 
             if (dr.GetDataTypeName(i) == "NUMBER")
             {
-                return Convert.ToInt32(dr.GetDouble(i));
+                return Convert.ToInt32(dr.GetDecimal(i));
             } 
             var result = dr.GetInt32(i);
             return result;
@@ -303,6 +313,10 @@ namespace SqlSugar
             var obj = dr.GetValue(i);
             if (obj == null)
                 return default(T);
+            if (obj is byte[] bytes) 
+            {
+                obj = dr.GetString(i);
+            }
             var value = obj.ObjToString();
             return new SerializeService().DeserializeObject<T>(value);
         }

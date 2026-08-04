@@ -30,6 +30,10 @@ namespace SqlSugar
             CheckDbDependency(config);
             if (StaticConfig.CompleteDbFunc != null) 
             {
+                if (this.CurrentConnectionConfig.AopEvents == null) 
+                {
+                    this.CurrentConnectionConfig.AopEvents = new AopEvents();
+                }
                 StaticConfig.CompleteDbFunc(this);
             }
         }
@@ -104,7 +108,15 @@ namespace SqlSugar
         public DateTime GetDate()
         {
             var sqlBuilder = InstanceFactory.GetSqlbuilder(this.Context.CurrentConnectionConfig);
-            return this.Ado.GetDateTime(sqlBuilder.FullSqlDateNow);
+            sqlBuilder.Context = this.Context;
+            var obj= this.Ado.GetScalar(sqlBuilder.FullSqlDateNow);
+            if (obj is DateTime s)
+                return s;
+            else if(obj is DateTimeOffset off)
+            {
+                return UtilMethods.ConvertFromDateTimeOffset(off);
+            }
+            return Convert.ToDateTime(obj);
         }
         public ISugarQueryable<T> MasterQueryable<T>()
         {
@@ -432,10 +444,14 @@ namespace SqlSugar
         public virtual ISugarQueryable<T> Queryable<T>(ISugarQueryable<T> queryable)  
         {
             var sqlobj = queryable.ToSql();
+            var QueryBuilder = queryable.QueryBuilder;
             var newQueryable = this.SqlQueryable<object>(sqlobj.Key).AddParameters(sqlobj.Value);
             var result = newQueryable.Select<T>(newQueryable.QueryBuilder.SelectValue+"");
             result.QueryBuilder.IsSqlQuery = false;
             result.QueryBuilder.NoCheckInclude = true;
+            result.QueryBuilder.WhereIndex = (QueryBuilder.WhereIndex + 1);
+            var appendIndex = result.QueryBuilder.Parameters == null ? 1 : result.QueryBuilder.Parameters.Count + 1;
+            result.QueryBuilder.LambdaExpressions.ParameterIndex = (QueryBuilder.LambdaExpressions.ParameterIndex + appendIndex);
             result.QueryBuilder.Includes = queryable.QueryBuilder.Includes?.ToList();
             return result;
         }
@@ -653,8 +669,12 @@ namespace SqlSugar
             {
                 return resulut.Select<T>("unionTable.*");
             }
-            else
+            else if (this.Context.CurrentConnectionConfig?.MoreSettings?.IsWithNoLockQuery==true)
             {
+                return resulut.Select<T>(sqlBuilder.SqlSelectAll).With(SqlWith.Null);
+            }
+            else
+            { 
                 return resulut.Select<T>(sqlBuilder.SqlSelectAll);
             }
         }
@@ -1241,6 +1261,10 @@ namespace SqlSugar
         {
             return DeleteNav(this.Queryable<T>().Where(whereExpression).ToList());
         }
+        public DeleteNavTaskInit<T, T> DeleteNav<T>(object[] primaryKeys) where T : class, new()
+        {
+            return this.Context.DeleteNav(this.Queryable<T>().In(primaryKeys).ToList());
+        }
 
         public DeleteNavTaskInit<T, T> DeleteNav<T>(T data, DeleteNavRootOptions options) where T : class, new()
         {
@@ -1581,6 +1605,10 @@ namespace SqlSugar
                             parameter.DbType = itemParameter.DbType;
                             if (repeatCount>500||(isParameterNameRepeat&& repeatList.Any(it=>it.Key.EqualCase(itemParameter.ParameterName))))
                             {
+                                if (newName.StartsWith(":") && itemSql.ToLower().Contains(itemParameter.ParameterName.ToLower().Replace(":", "@")))
+                                {
+                                    itemParameter.ParameterName = itemParameter.ParameterName.Replace(":", "@");
+                                }
                                 itemSql = UtilMethods.ReplaceSqlParameter(itemSql, itemParameter, newName);
                                 addParameters.Add(parameter);
                             }
@@ -1657,6 +1685,10 @@ namespace SqlSugar
                             parameter.DbType = itemParameter.DbType;
                             if (repeatCount>500||(isParameterNameRepeat&& repeatList.Any(it=>it.Key.EqualCase(itemParameter.ParameterName))))
                             {
+                                if (newName.StartsWith(":") && itemSql.ToLower().Contains(itemParameter.ParameterName.ToLower().Replace(":", "@")))
+                                {
+                                    itemParameter.ParameterName = itemParameter.ParameterName.Replace(":", "@"); 
+                                }
                                 itemSql = UtilMethods.ReplaceSqlParameter(itemSql, itemParameter, newName);
                             }
                             else 
@@ -1672,6 +1704,10 @@ namespace SqlSugar
                             .TrimEnd('\r')
                             .TrimEnd('\n')
                             .TrimEnd(';') + ";";
+                        if (itemSql?.StartsWith("INSERT INTO ")==true&&itemSql?.EndsWith(" returning ;") == true) 
+                        {
+                            itemSql = itemSql.Replace(" returning ;", " ;");
+                        }
                         if (itemSql == "begin;"   ) 
                         {
                             itemSql = itemSql.TrimEnd(';')+"\n";
@@ -1833,6 +1869,7 @@ namespace SqlSugar
         {
             var result= new SqlSugarClient(UtilMethods.CopyConfig(this.Ado.Context.CurrentConnectionConfig));
             result.QueryFilter = this.QueryFilter;
+            result.Ado.CommandTimeOut = this.Ado.CommandTimeOut;
             return result;
         }
         public void ThenMapper<T>(IEnumerable<T> list, Action<T> action)

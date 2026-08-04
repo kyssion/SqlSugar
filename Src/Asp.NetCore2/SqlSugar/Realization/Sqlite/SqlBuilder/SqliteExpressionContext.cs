@@ -18,6 +18,11 @@ namespace SqlSugar
     }
     public class SqliteMethod : DefaultDbMethod, IDbMethods
     {
+        public override string UNIX_TIMESTAMP(MethodCallExpressionModel model)
+        {
+            var parameterNameA = model.Args[0].MemberName;
+            return $" CAST(STRFTIME('%s', {parameterNameA}) AS INTEGER) ";
+        }
         public override string WeekOfYear(MethodCallExpressionModel mode)
         {
             var parameterNameA = mode.Args[0].MemberName;
@@ -31,6 +36,11 @@ namespace SqlSugar
                 result = (" " + result.Trim().TrimEnd(')') + " COLLATE NOCASE )  ");
             }
             return result;
+        }
+        public override string Collate(MethodCallExpressionModel model)
+        {
+            var name = model.Args[0].MemberName;
+            return $" {name}   COLLATE BINARY   ";
         }
         public override string JsonIndex(MethodCallExpressionModel model)
         {
@@ -95,6 +105,10 @@ namespace SqlSugar
         {
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
+            if (IsEscapedLikePattern(parameter2))
+            {
+                return string.Format(" ({0} like '%'||{1}||'%' escape '\\'  ) ", parameter.MemberName, parameter2.MemberName); ;
+            }
             return string.Format(" ({0} like '%'||{1}||'%') ", parameter.MemberName, parameter2.MemberName);
         }
 
@@ -102,6 +116,10 @@ namespace SqlSugar
         {
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
+            if (IsEscapedLikePattern(parameter2))
+            {
+                return string.Format(" ({0} like {1}||'%' escape '\\'  ) ", parameter.MemberName, parameter2.MemberName); ;
+            }
             return string.Format(" ({0} like {1}||'%') ", parameter.MemberName, parameter2.MemberName);
         }
 
@@ -109,7 +127,18 @@ namespace SqlSugar
         {
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
+            if (IsEscapedLikePattern(parameter2))
+            {
+                return string.Format(" ({0} like '%'||{1} escape '\\'  ) ", parameter.MemberName, parameter2.MemberName); ;
+            }
             return string.Format("  ({0} like '%'||{1}) ", parameter.MemberName, parameter2.MemberName);
+        }
+
+        private static bool IsEscapedLikePattern(MethodCallExpressionArgs parameter2)
+        {
+            return parameter2.MemberValue is string s && s?.Contains("\\%") == true||
+                   parameter2.MemberValue is string s2 && s2?.Contains("\\_") == true
+                ;
         }
 
         public override string ToInt32(MethodCallExpressionModel model)
@@ -333,7 +362,7 @@ namespace SqlSugar
         {
             var parameterNameA = mode.Args[0].MemberName;
             var parameterNameB = mode.Args[1].MemberName;
-            return $" SUBSTR({parameterNameA}, -2, {parameterNameB})  ";
+            return $" SUBSTR({parameterNameA}, -{parameterNameB}, {parameterNameB})  ";  //修改 20260121
         }
 
         public override string NewUid(MethodCallExpressionModel mode)

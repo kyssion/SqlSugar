@@ -10,6 +10,14 @@ namespace SqlSugar
 {
     public partial class SqlFunc
     {
+        public static long UNIX_TIMESTAMP(DateTime dateTime) 
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
+        public static T Coalesce<T>(T value1, T value2)
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
         public static bool FullTextContains(string [] columnNames, string keyword)
         {
             throw new NotSupportedException("Can only be used in expressions");
@@ -259,6 +267,14 @@ namespace SqlSugar
         public static bool ContainsArray<T>(List<T> thisValue, object InField)
         {
             return thisValue.Contains((T)InField);
+        } 
+        public static bool ContainsArray<T>(T[] thisValue, object InField, bool isNvarchar)
+        {
+            return thisValue.Contains((T)InField, true);
+        }
+        public static bool ContainsArray<T>(List<T> thisValue, object InField, bool isNvarchar)
+        {
+            return thisValue.Contains((T)InField, true);
         }
         public static bool ContainsArrayUseSqlParameters<T>(List<T> thisValue, object InField)
         {
@@ -360,6 +376,8 @@ namespace SqlSugar
         public static TResult AggregateMax<TResult>(TResult thisValue) { throw new NotSupportedException("Can only be used in expressions"); }
         public static int AggregateCount<TResult>(TResult thisValue) { throw new NotSupportedException("Can only be used in expressions"); }
         public static int AggregateDistinctCount<TResult>(TResult thisValue) { throw new NotSupportedException("Can only be used in expressions"); }
+        public static int AggregateDistinctSum<TResult>(TResult thisValue) { throw new NotSupportedException("Can only be used in expressions"); }
+        public static int AggregateDistinctAvg<TResult>(TResult thisValue) { throw new NotSupportedException("Can only be used in expressions"); }
         public static TResult MappingColumn<TResult>(TResult type,string newColumnName) { throw new NotSupportedException("Can only be used in expressions"); }
         public static TResult MappingColumn<TResult>(string newColumnName) { throw new NotSupportedException("Can only be used in expressions"); }
         /// <summary>
@@ -428,6 +446,26 @@ namespace SqlSugar
         }
          
         public static string OnlyInSelectConvertToString(string stringValue, MethodInfo methodInfo)
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
+        public static void SelectFields(string fieldName1)
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
+        public static void SelectFields(string fieldName1,string fieldName2)
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
+        public static void SelectFields(string fieldName1, string fieldName2, string fieldName3)
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
+        public static void SelectFields(string fieldName1, string fieldName2, string fieldName3, string fieldName4)
+        {
+            throw new NotSupportedException("Can only be used in expressions");
+        }
+        public static void SelectFields(string fieldName1, string fieldName2, string fieldName3, string fieldName4, string fieldName5)
         {
             throw new NotSupportedException("Can only be used in expressions");
         }

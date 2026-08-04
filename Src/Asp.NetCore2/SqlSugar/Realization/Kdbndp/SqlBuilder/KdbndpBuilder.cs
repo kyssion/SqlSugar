@@ -24,6 +24,10 @@ namespace SqlSugar
         {
             get
             {
+                if (UtilMethods.GetDataBaseModel(this.Context) == DbType.SqlServer)
+                {
+                    return "getdate()";
+                }
                 return "current_date";
             }
         }
@@ -31,11 +35,15 @@ namespace SqlSugar
         {
             get
             {
+                if (UtilMethods.GetDataBaseModel(this.Context) == DbType.SqlServer)
+                {
+                    return "select getdate()";
+                }
                 return "select current_date";
             }
         }
 
-    
+
         public override string GetTranslationColumnName(string propertyName)
         {
             if (propertyName.Contains(".") && !propertyName.Contains(SqlTranslationLeft))
@@ -75,6 +83,10 @@ namespace SqlSugar
             name = (mappingInfo == null ? name : mappingInfo.DbTableName);
             if (name.Contains(".")&& !name.Contains("("))
             {
+                if (SqlTranslationLeft.HasValue()&&SqlTranslationLeft==SqlTranslationRight) 
+                {
+                    return string.Join(".", name.ToUpper(IsUpper).Split('.').Select(it => SqlTranslationLeft + it.Replace(SqlTranslationLeft,"") + SqlTranslationRight));
+                }
                 return string.Join(".", name.ToUpper(IsUpper).Split('.').Select(it => SqlTranslationLeft + it + SqlTranslationRight));
             }
             else if (name.Contains("("))

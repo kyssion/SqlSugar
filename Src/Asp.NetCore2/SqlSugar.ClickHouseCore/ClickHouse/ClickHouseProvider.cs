@@ -121,11 +121,16 @@ namespace SqlSugar.ClickHouse
             {
                 var newName = param.ParameterName.TrimStart('@');
                 object dbtype = param.DbType;
-                if (dbtype.ObjToString() == System.Data.DbType.Decimal.ToString()) 
+                var dbTypeString= dbtype.ObjToString();
+                if (dbtype is System.Data.DbType.AnsiString) 
+                {
+                    dbtype = System.Data.DbType.String;
+                }
+                if (dbTypeString == System.Data.DbType.Decimal.ToString()) 
                 {
                     dbtype = ClickHouseDbBind.MappingTypesConst.First(it => it.Value == CSharpDataType.@decimal).Key;
                 }
-                if (dbtype.ObjToString() == System.Data.DbType.Guid.ToString())
+                if (dbTypeString == System.Data.DbType.Guid.ToString())
                 {
                     dbtype = ClickHouseDbBind.MappingTypesConst.First(it => it.Value == CSharpDataType.Guid).Key;
                     if (param.Value == DBNull.Value)
@@ -133,15 +138,23 @@ namespace SqlSugar.ClickHouse
                         sql = sql.Replace(param.ParameterName, "null");
                     }
                 }
-                if (dbtype.ObjToString() == System.Data.DbType.SByte.ToString())
+                if (dbTypeString == System.Data.DbType.Int64.ToString())
+                {
+                    dbtype = ClickHouseDbBind.MappingTypesConst.First(it => it.Value == CSharpDataType.@long).Key;
+                    if (param.Value == DBNull.Value)
+                    {
+                        sql = sql.Replace(param.ParameterName, "null");
+                    }
+                }
+                if (dbTypeString == System.Data.DbType.SByte.ToString())
                 {
                     dbtype = ClickHouseDbBind.MappingTypesConst.First(it => it.Value == CSharpDataType.@sbyte).Key;
                 }
-                if (param.Value != null && param.Value != DBNull.Value && dbtype.ObjToString() == System.Data.DbType.Boolean.ToString())
+                if (param.Value != null && param.Value != DBNull.Value && dbTypeString == System.Data.DbType.Boolean.ToString())
                 {
                     sql = sql.Replace(param.ParameterName, param.Value.ObjToBool() ? "1" : "0");
                 }
-                else if (dbtype.ObjToString() == System.Data.DbType.Boolean.ToString())
+                else if (dbTypeString == System.Data.DbType.Boolean.ToString())
                 {
                     sql = sql.Replace(param.ParameterName, "null");
                 }
@@ -153,14 +166,25 @@ namespace SqlSugar.ClickHouse
                     }
                     else
                     {
+                        var isByteArray = false;
+                        if (param.Value is byte[] bs) 
+                        {
+                            isByteArray = true;
+                            param.Value = bs.Select(it=>Convert.ToInt32(it)); 
+                        }
                         sql = sql.Replace(param.ParameterName,   this.Context.Utilities.SerializeObject(param.Value).Replace("\"","'"));
+                        if (isByteArray)
+                        {
+                            param.Value = DBNull.Value;
+                            param.DbType = System.Data.DbType.String;
+                        }
                     }
                 }
-                else if (dbtype.ObjToString() == "DateTime" && param.Value == DBNull.Value)
+                else if (dbTypeString == "DateTime" && param.Value == DBNull.Value)
                 {
                     sql = sql.Replace(param.ParameterName, "null");
                 }
-                else if (dbtype.ObjToString() == "UUID" && param.Value == DBNull.Value)
+                else if (dbTypeString == "UUID" && param.Value == DBNull.Value)
                 {
                     sql = sql.Replace(param.ParameterName, "null");
                 }

@@ -18,11 +18,15 @@ namespace SqlSugar
         IDataParameter[] ToIDbDataParameter(params SugarParameter[] pars);
         SugarParameter[] GetParameters(object obj, PropertyInfo[] propertyInfo = null);
         SqlSugarProvider Context { get; set; }
+        void CheckConnectionAfter(IDbConnection Connection);
+        void CheckConnectionBefore(IDbConnection Connection);
         void ExecuteBefore(string sql, SugarParameter[] pars);
         void ExecuteAfter(string sql, SugarParameter[] pars);
+        void GetDataBefore(string sql, SugarParameter[] parameters);
+        void GetDataAfter(string sql, SugarParameter[] parameters);
         bool IsAnyTran();
         bool IsNoTran();
-        bool IsEnableLogEvent{get;set;}
+        bool IsEnableLogEvent { get; set; }
         StackTraceInfo SqlStackTrace { get; }
         IDataParameterCollection DataReaderParameters { get; set; }
         CommandType CommandType { get; set; }
@@ -31,7 +35,9 @@ namespace SqlSugar
         bool IsClearParameters { get; set; }
         int CommandTimeOut { get; set; }
         TimeSpan SqlExecutionTime { get; }
+        TimeSpan ConnectionExecutionTime { get; }
         int SqlExecuteCount { get; }
+        SugarActionType SqlExecuteType { get;}
         IDbBind DbBind { get; }
         void SetCommandToAdapter(IDataAdapter adapter, DbCommand command);
         IDataAdapter GetAdapter();
@@ -69,6 +75,7 @@ namespace SqlSugar
         object GetScalar(string sql, List<SugarParameter> parameters);
 
         Task<object> GetScalarAsync(string sql, object parameters);
+        Task<object> GetScalarAsync(string sql, object parameters, CancellationToken cancellationToken);
         Task<object> GetScalarAsync(string sql, params SugarParameter[] parameters);
         Task<object> GetScalarAsync(string sql, List<SugarParameter> parameters);
 
@@ -79,13 +86,14 @@ namespace SqlSugar
 
         Task<int> ExecuteCommandAsync(string sql, params SugarParameter[] parameters);
         Task<int> ExecuteCommandAsync(string sql, object parameters);
-        Task<int> ExecuteCommandAsync(string sql, object parameters,CancellationToken cancellationToken);
+        Task<int> ExecuteCommandAsync(string sql, object parameters, CancellationToken cancellationToken);
         Task<int> ExecuteCommandAsync(string sql, List<SugarParameter> parameters);
 
         string GetString(string sql, object parameters);
         string GetString(string sql, params SugarParameter[] parameters);
         string GetString(string sql, List<SugarParameter> parameters);
         Task<string> GetStringAsync(string sql, object parameters);
+        Task<string> GetStringAsync(string sql, object parameters, CancellationToken cancellationToken);
         Task<string> GetStringAsync(string sql, params SugarParameter[] parameters);
         Task<string> GetStringAsync(string sql, List<SugarParameter> parameters);
 
@@ -95,20 +103,21 @@ namespace SqlSugar
         int GetInt(string sql, List<SugarParameter> parameters);
 
         Task<int> GetIntAsync(string sql, object pars);
+        Task<int> GetIntAsync(string sql, object pars,CancellationToken cancellationToken);
         Task<int> GetIntAsync(string sql, params SugarParameter[] parameters);
         Task<int> GetIntAsync(string sql, List<SugarParameter> parameters);
 
 
-        long GetLong(string sql, object pars=null);
+        long GetLong(string sql, object pars = null);
 
-        Task<long> GetLongAsync(string sql, object pars=null);
+        Task<long> GetLongAsync(string sql, object pars = null);
 
 
         Double GetDouble(string sql, object parameters);
         Double GetDouble(string sql, params SugarParameter[] parameters);
         Double GetDouble(string sql, List<SugarParameter> parameters);
 
-
+        Task<Double> GetDoubleAsync(string sql, object parameters, CancellationToken cancellationToken);
         Task<Double> GetDoubleAsync(string sql, object parameters);
         Task<Double> GetDoubleAsync(string sql, params SugarParameter[] parameters);
         Task<Double> GetDoubleAsync(string sql, List<SugarParameter> parameters);
@@ -132,12 +141,12 @@ namespace SqlSugar
         Task<DateTime> GetDateTimeAsync(string sql, List<SugarParameter> parameters);
 
 
-        Tuple<List<T>, List<T2>> SqlQuery<T,T2>(string sql, object parameters = null);
-        Tuple<List<T>, List<T2>, List<T3>> SqlQuery<T, T2,T3>(string sql, object parameters = null);
-        Tuple<List<T>, List<T2>, List<T3>,List<T4>> SqlQuery<T,T2,T3,T4>(string sql, object parameters = null);
-        Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>> SqlQuery<T, T2, T3, T4,T5>(string sql, object parameters = null);
-        Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> SqlQuery<T, T2, T3, T4, T5,T6>(string sql, object parameters = null);
-        Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> SqlQuery<T, T2, T3, T4, T5, T6,T7>(string sql, object parameters = null);
+        Tuple<List<T>, List<T2>> SqlQuery<T, T2>(string sql, object parameters = null);
+        Tuple<List<T>, List<T2>, List<T3>> SqlQuery<T, T2, T3>(string sql, object parameters = null);
+        Tuple<List<T>, List<T2>, List<T3>, List<T4>> SqlQuery<T, T2, T3, T4>(string sql, object parameters = null);
+        Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>> SqlQuery<T, T2, T3, T4, T5>(string sql, object parameters = null);
+        Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>> SqlQuery<T, T2, T3, T4, T5, T6>(string sql, object parameters = null);
+        Tuple<List<T>, List<T2>, List<T3>, List<T4>, List<T5>, List<T6>, List<T7>> SqlQuery<T, T2, T3, T4, T5, T6, T7>(string sql, object parameters = null);
 
         Task<Tuple<List<T>, List<T2>>> SqlQueryAsync<T, T2>(string sql, object parameters = null);
         Task<Tuple<List<T>, List<T2>, List<T3>>> SqlQueryAsync<T, T2, T3>(string sql, object parameters = null);
@@ -153,7 +162,7 @@ namespace SqlSugar
         List<T> MasterSqlQuery<T>(string sql, object parameters = null);
 
         Task<List<T>> SqlQueryAsync<T>(string sql, object parameters = null);
-        Task<List<T>> SqlQueryAsync<T>(string sql, object parameters,CancellationToken token);
+        Task<List<T>> SqlQueryAsync<T>(string sql, object parameters, CancellationToken token);
         Task<List<T>> SqlQueryAsync<T>(string sql, List<SugarParameter> parameters);
         Task<List<T>> SqlQueryAsync<T>(string sql, params SugarParameter[] parameters);
 
@@ -169,7 +178,9 @@ namespace SqlSugar
 
         void Dispose();
         void Close();
+        Task CloseAsync();
         void Open();
+        Task OpenAsync();
         SugarConnection OpenAlways();
         bool IsValidConnection();
         bool IsValidConnectionNoClose();
@@ -191,6 +202,6 @@ namespace SqlSugar
         Task<DbResult<bool>> UseTranAsync(Func<Task> action, Action<Exception> errorCallBack = null);
         Task<DbResult<T>> UseTranAsync<T>(Func<Task<T>> action, Action<Exception> errorCallBack = null);
         IAdo UseStoredProcedure();
-         
+
     }
 }

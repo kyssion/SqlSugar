@@ -73,12 +73,27 @@ namespace SqlSugar
                             object value = null;
                             if (it.Value is DateTime)
                             {
-                                value = ((DateTime)it.Value).ToString("O");
+                                if (IsSqlServerModel())
+                                {
+                                    value = ((DateTime)it.Value).ToString("yyyy-MM-dd HH:mm:ss.fff");
+                                }
+                                else
+                                {
+                                    value = ((DateTime)it.Value).ToString("O");
+                                }
                             }
                             else if (it.Value is DateTimeOffset)
                             {
                                 return FormatDateTimeOffset(it.Value);
                             }
+                            else if (IsSqlOracleModel()&& it.Value is TimeSpan timeSpan)
+                            {
+                                return $"'{timeSpan.Days} {timeSpan.Hours:00}:{timeSpan.Minutes:00}:{timeSpan.Seconds:00}.{timeSpan.Milliseconds:000}{timeSpan.Ticks % 10000:0000}'";
+                            }
+                            else if (it.Value is bool&& (IsMySqlModel()|| IsSqlServerModel()))
+                            {
+                                return Convert.ToBoolean(it.Value)?"1":"0";
+                            } 
                             else
                             {
                                 value = it.Value;
@@ -97,8 +112,18 @@ namespace SqlSugar
                 return batchInsetrSql.ToString();
             }
         }
-
-
+        private bool IsSqlOracleModel()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.Oracle;
+        }
+        private bool IsSqlServerModel()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
+        }
+        private bool IsMySqlModel()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.MySql;
+        }
         public override string FormatDateTimeOffset(object value)
         {
             var date = UtilMethods.ConvertFromDateTimeOffset((DateTimeOffset)value);

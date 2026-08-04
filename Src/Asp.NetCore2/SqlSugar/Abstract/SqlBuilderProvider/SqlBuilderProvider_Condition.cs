@@ -11,7 +11,7 @@ namespace SqlSugar
     public abstract partial class SqlBuilderProvider : SqlBuilderAccessory, ISqlBuilder
     {
         #region Core
-        public KeyValuePair<string, SugarParameter[]> ConditionalModelToSql(List<IConditionalModel> models, int beginIndex = 0)
+        public virtual KeyValuePair<string, SugarParameter[]> ConditionalModelToSql(List<IConditionalModel> models, int beginIndex = 0)
         {
             if (models.IsNullOrEmpty()) return new KeyValuePair<string, SugarParameter[]>();
             StringBuilder builder = new StringBuilder();
@@ -135,6 +135,9 @@ namespace SqlSugar
                         case ConditionalType.Range:
                             Range(builder, parameters, item, index, type, parameterName);
                             break;
+                        case ConditionalType.RangeDate:
+                            RangeDate(builder, parameters, item, index, type, parameterName);
+                            break;
                         default:
                             break;
                     }
@@ -176,6 +179,8 @@ namespace SqlSugar
                                     builder.Replace(" OR (  AND", " OR (  ");
                                     builder.Replace(" (  AND ", " ( ");
                                     builder.Replace(" (  OR ", " ( ");
+                                    builder.Replace("   OR  AND ", "   OR ");
+                                    builder.Replace("   AND  AND ", "   AND ");
                                 }
                             }
                             parameters.AddRange(childSqlInfo.Value);
@@ -215,9 +220,68 @@ namespace SqlSugar
             var lastValue= GetFieldValue(new ConditionalModel() { CSharpTypeName = item.CSharpTypeName, FieldValue = valueArray.LastOrDefault() });
             var parameterNameFirst =parameterName+"_01";
             var parameterNameLast = parameterName+"_02";
-            builder.AppendFormat("( {0}>={1} AND {0}<={2} )", item.FieldName.ToSqlFilter(), parameterNameFirst, parameterNameLast);
+            builder.AppendFormat(type+"( {0}>={1} AND {0}<={2} )", item.FieldName.ToSqlFilter(), parameterNameFirst, parameterNameLast);
             parameters.Add(new SugarParameter(parameterNameFirst, firstValue));
             parameters.Add(new SugarParameter(parameterNameLast, lastValue));
+        }
+        private static void RangeDate(StringBuilder builder, List<SugarParameter> parameters, ConditionalModel item, int index, string type, string parameterName)
+        {
+            var value = item.FieldValue;
+            var valueArray = (value + "").Split(',');
+            if (valueArray.Length != 2)
+            {
+                Check.ExceptionEasy($"The {item.FieldName} value is not a valid format, but is properly separated by a comma (1,2)", $"{item.FieldName} 值不是有效格式，正确是 1,2 这种中间逗号隔开");
+            }
+            var times = GetDateRange(valueArray.FirstOrDefault(), valueArray.LastOrDefault());
+            var parameterNameFirst = parameterName + "_01";
+            var parameterNameLast = parameterName + "_02";
+            builder.AppendFormat(type+"( {0}>={1} AND {0}<{2} )", item.FieldName.ToSqlFilter(), parameterNameFirst, parameterNameLast);
+            parameters.Add(new SugarParameter(parameterNameFirst, times.First()));
+            parameters.Add(new SugarParameter(parameterNameLast, times.Last()));
+        }
+        public static DateTime[] GetDateRange(string date1Str, string date2Str)
+        {
+            date1Str = date1Str.Trim();
+            date2Str = date2Str.Trim();
+            var len = date2Str.Trim().Length;
+            if (date1Str.Length == 4)
+            {
+                date1Str = new DateTime(int.Parse(date1Str), 1, 1).ToString(SugarDateTimeFormat.Default);
+            }
+            if (date2Str.Length == 4)
+            {
+                date2Str = new DateTime(int.Parse(date2Str), 1, 1).ToString(SugarDateTimeFormat.Default);
+            }
+            if (date1Str.Length == 13) 
+            {
+                date1Str = date1Str + ":00:00";
+            }
+            if (date2Str.Length == 13)
+            {
+                date2Str = date2Str + ":00:00";
+            }
+            if (!DateTime.TryParse(date1Str, out var date1))
+                Check.ExceptionEasy("date1 format is incorrect.(yyyy-MM-dd | yyyy | yyyy-MM | yyyy-MM-dd HH | yyyy-MM-dd HH:mm |yyyy-MM-dd HH:mm:ss)", "date1 格式不正确，支持格式 yyyy-MM-dd | yyyy | yyyy-MM | yyyy-MM-dd HH | yyyy-MM-dd HH:mm|yyyy-MM-dd HH:mm:ss");
+
+            if (!DateTime.TryParse(date2Str, out var date2))
+                Check.ExceptionEasy("date2 format is incorrect.", "date2 格式不正确");
+
+            if (len == 4) // yyyy
+                date2 = date2.AddYears(1);
+            else if (len == 7) // yyyy-MM
+                date2 = date2.AddMonths(1);
+            else if (len == 10) // yyyy-MM-dd
+                date2 = date2.AddDays(1);
+            else if (len == 13) // yyyy-MM-dd HH
+                date2 = date2.AddHours(1);
+            else if (len == 16) // yyyy-MM-dd HH:mm
+                date2 = date2.AddMinutes(1);
+            else if (len == 19) // yyyy-MM-dd HH:mm
+                date2 = date2.AddSeconds(1);
+            else
+                Check.ExceptionEasy("date format is incorrect.(yyyy-MM-dd | yyyy | yyyy-MM | yyyy-MM-dd HH | yyyy-MM-dd HH:mm|yyyy-MM-dd HH:mm:ss)", "date 格式不正确，支持格式 yyyy-MM-dd | yyyy | yyyy-MM | yyyy-MM-dd HH | yyyy-MM-dd HH:mm|yyyy-MM-dd HH:mm:ss");
+
+            return new DateTime[] { date1, date2 };
         }
         private static void InLike(StringBuilder builder, List<SugarParameter> parameters, ConditionalModel item, int index, string type, string parameterName)
         {
@@ -255,8 +319,20 @@ namespace SqlSugar
             }
             else
             {
-                builder.AppendFormat(temp, type, item.FieldName.ToSqlFilter(), "<>", parameterName);
+              
+                if (builder.Length > 0)
+                {
+
+                    builder.AppendFormat(" AND ("+temp, null, item.FieldName.ToSqlFilter(), "<>", parameterName);
+                }
+                else
+                {
+                    builder.Append("(");
+                    builder.AppendFormat(temp, type, item.FieldName.ToSqlFilter(), "<>", parameterName);
+                }
                 parameters.Add(new SugarParameter(parameterName, item.FieldValue));
+                builder.Append($"OR {item.FieldName.ToSqlFilter()} is null ");
+                builder.Append(")");
             }
         }
 
@@ -372,7 +448,14 @@ namespace SqlSugar
             }
             else
             {
-                inValue1 = ("(" + inArray.Select(it => it == "" ? "null" : it).Distinct().ToArray().ToJoinSqlInVals() + ")");
+                if (item.CSharpTypeName.EqualCase("nstring"))
+                {
+                    inValue1 = ("(" + inArray.Select(it => it == "" ? "null" : it).Distinct().ToArray().ToJoinSqlInValsByVarchar() + ")");
+                }
+                else
+                {
+                    inValue1 = ("(" + inArray.Select(it => it == "" ? "null" : it).Distinct().ToArray().ToJoinSqlInVals() + ")");
+                }
             }
 
             return inValue1;
@@ -388,10 +471,23 @@ namespace SqlSugar
             {
                 if (item.FieldValue == "[null]")
                 {
-                    item.FieldValue = "'null'";
+                    item.FieldValue = "null";
                 }
                 builder.AppendFormat(temp, type, item.FieldName.ToSqlFilter(), "=", parameterName);
-                parameters.Add(new SugarParameter(parameterName, GetFieldValue(item)));
+                var p = new SugarParameter(parameterName, GetFieldValue(item));
+                if (item.CSharpTypeName .EqualCase("DateOnly")) 
+                {
+                    p.DbType = System.Data.DbType.Date;
+                }
+                if (item.CSharpTypeName.EqualCase("Char"))
+                {
+                    p.DbType = System.Data.DbType.StringFixedLength;
+                }
+                if (item.CSharpTypeName.EqualCase("AnsiString"))
+                {
+                    p.DbType = System.Data.DbType.AnsiString;
+                }
+                parameters.Add(p);
             }
         } 
         #endregion

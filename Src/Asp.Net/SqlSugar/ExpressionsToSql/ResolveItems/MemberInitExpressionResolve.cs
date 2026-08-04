@@ -55,11 +55,10 @@ namespace SqlSugar
                 var item = memberAssignment.Expression;
                 item = ExpressionTool.RemoveConvert(item);
                 //Column IsJson Handler
-                if (memberAssignment.Member.CustomAttributes != null)
-                {
-                    var customAttribute = memberAssignment.Member.GetCustomAttribute<SugarColumn>();
-
-                    if (customAttribute?.IsJson ?? false)
+                if (entityMaintenance!=null)
+                { 
+                    EntityColumnInfo columnInfo = entityMaintenance.GetEntityInfo(type).Columns.FirstOrDefault(it => it.PropertyName == memberAssignment.Member.Name);
+                    if (columnInfo?.IsJson ?? false)
                     {
                         var paramterValue = ExpressionTool.DynamicInvoke(item);
                         var parameterName = AppendParameter(new SerializeService().SerializeObject(paramterValue));
@@ -70,6 +69,15 @@ namespace SqlSugar
                         }
                         this.Context.Result.Append(base.Context.GetEqString(memberName, parameterName));
 
+                        continue;
+                    }
+                    else if (UtilMethods.IsParameterConverter(columnInfo))
+                    { 
+                        var value = ExpressionTool.DynamicInvoke(item);
+                        var p=UtilMethods.GetParameterConverter(this.Context.ParameterIndex,this.Context.SugarContext.Context, value, memberAssignment.Expression, columnInfo);
+                        this.Context.Result.Append(base.Context.GetEqString(memberName, p.ParameterName));
+                        this.Context.ParameterIndex++;
+                        this.Context.Parameters.Add(p);
                         continue;
                     }
                 }
@@ -156,6 +164,14 @@ namespace SqlSugar
                     string parameterName = this.Context.SqlParameterKeyWord + ExpressionConst.Const + this.Context.ParameterIndex;
                     parameter.Context.Result.Append(base.Context.GetEqString(memberName, parameterName));
                     var addItem = new SugarParameter(parameterName, parameter.CommonTempData);
+                    if (addItem.Value == null&&item.Type?.Name== "Nullable`1") 
+                    {
+                        var genericType = item.Type?.GenericTypeArguments?.FirstOrDefault();
+                        if (genericType != null) 
+                        {
+                            addItem.DbType = new SugarParameter(parameterName, UtilMethods.GetDefaultValue(genericType)).DbType;
+                        }
+                    }
                     ConvertParameterTypeByType(item, addItem);
 
                     this.Context.Parameters.Add(addItem);
@@ -314,6 +330,7 @@ namespace SqlSugar
 
         private void Select(MemberInitExpression expression, ExpressionParameter parameter, bool isSingle)
         {
+            var isAnyParameterExpression = false;
             foreach (MemberBinding binding in expression.Bindings)
             {
                 if (binding.BindingType != MemberBindingType.Assignment)
@@ -326,7 +343,7 @@ namespace SqlSugar
                 {
                     continue;
                 }
-                var item = memberAssignment.Expression;
+                var item =ExpressionTool.RemoveConvert(memberAssignment.Expression);
                 if (item.Type.IsClass()&& item is MemberExpression &&(item as MemberExpression).Expression is ParameterExpression) 
                 {
                     var rootType = ((item as MemberExpression).Expression as ParameterExpression).Type;
@@ -348,7 +365,15 @@ namespace SqlSugar
                         item = (item as UnaryExpression).Operand;
                     }
                 }
+                if(item is ParameterExpression) 
+                {
+                    isAnyParameterExpression = true;
+                }
                 ResolveNewExpressions(parameter, item, memberName);
+            }
+            if (isAnyParameterExpression && this.Context?.SugarContext?.QueryBuilder is QueryBuilder builder) 
+            {
+                builder.IsAnyParameterExpression = true;
             }
         }
 

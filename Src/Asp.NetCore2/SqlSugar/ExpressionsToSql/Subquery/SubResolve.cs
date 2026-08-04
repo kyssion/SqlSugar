@@ -54,6 +54,14 @@ namespace SqlSugar
                             {
                                 context.SingleTableNameSubqueryShortName = (((meExp.Body as BinaryExpression).Left as MemberExpression)?.Expression as ParameterExpression)?.Name;
                             }
+                            else if ((meExp.Body is MethodCallExpression methodCallExpression)&&methodCallExpression.Type==UtilConstants.BoolType)
+                            {
+                                var parameters = ExpressionTool.GetParameters(methodCallExpression);
+                                if (context.SingleTableNameSubqueryShortName == null&& parameters?.Select(s=>s.Name)?.Distinct()?.Count()==2)
+                                {
+                                    context.SingleTableNameSubqueryShortName = parameters?.LastOrDefault()?.Name;
+                                }
+                            }
                             if (ExpressionTool.GetMethodName(context.Expression).IsContainsIn("ToList") && meExp.Parameters.Any(it => it.Name == selfParameterName))
                             {
                                 if (meExp.Body is BinaryExpression)
@@ -186,6 +194,10 @@ namespace SqlSugar
                 {
                     var asName = this.context.GetTranslationTableName(asItems.First().Replace(subKey, ""), false);
                     var repKey = $"\\{this.context.SqlTranslationLeft}.+\\{this.context.SqlTranslationRight}";
+                    if (this.context.IsSingle&&this.context.JoinIndex==0&&this.context.CurrentShortName.HasValue()&& isAsAttr&& !asName.Contains(this.context.CurrentShortName))
+                    {
+                        asName = asName + " " + this.context.CurrentShortName+" ";
+                    }
                     sqlItems[i] = Regex.Replace(sqlItems[i], repKey, asName);
                 }
             }
@@ -196,7 +208,13 @@ namespace SqlSugar
             {
                 if (sqlItems[i].StartsWith("FROM " + this.context.SqlTranslationLeft))
                 {
-                    sqlItems[i] = sqlItems[i]+" "+this.context.CurrentShortName +" ";
+                    if (isAsAttr&&sqlItems[i].EndsWith(this.context.CurrentShortName + " "))
+                    {
+                    }
+                    else
+                    {
+                        sqlItems[i] = sqlItems[i] + " " + this.context.CurrentShortName + " ";
+                    }
                 }
             }
         }
@@ -278,15 +296,41 @@ namespace SqlSugar
             {
                 this.context.IsAsAttr = true;
             }
+            if (isubList.Any(it => it is SubSelect) && isubList.Any(it => it is SubTake)) 
+            {
+                isubList.RemoveAll(it => it is SubTake);
+            }
+            if (isJoin == false && isSubSubQuery&&this.context.CurrentShortName==null) 
+            {
+                this.context.CurrentShortName=ExpressionTool.GetParameters(allMethods.FirstOrDefault()).FirstOrDefault().Name;
+            }
+            var hasNolock = false;
             List<string> result = isubList.Select(it =>
             {
                 it.HasWhere = isHasWhere;
-                return it.GetValue(it.Expression);
+                if (it is SubWithNolock)
+                {
+                    hasNolock = true;
+                }
+                var innerResult = it.GetValue(it.Expression);
+                var innerIsJoin = (it is SubLeftJoin || it is SubInnerJoin);
+                var isSqlServer =UtilMethods.GetDatabaseType(this.context) == DbType.SqlServer;
+                if (hasNolock && innerIsJoin&& isSqlServer)
+                {
+                    innerResult = innerResult.Replace("] ON (", "] " + SqlWith.NoLock + " ON (");
+                }
+                return innerResult;
             }).ToList();
+            if (this.context?.SugarContext?.Context?.CurrentConnectionConfig?.DbType == DbType.Oracle && isubList.Any(s => s is SubSelect) && isubList.Any(s => s is SubOrderBy || s is SubOrderByDesc))
+            {
+                result.Insert(0, "SELECT * FROM(");
+                result.Add(") WHERE ROWNUM = 1  ");
+            }
             this.context.JoinIndex = 0;
             this.context.IsAsAttr = false;
             return result;
         }
+
 
         private static void SetOrderByIndex(List<ISubOperation> isubList)
         {

@@ -1,4 +1,4 @@
-﻿using System;
+﻿ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -298,16 +298,32 @@ namespace SqlSugar
                 var lamExp = (item as LambdaExpression);
                 var pExp = lamExp.Parameters[0];
                 var pname = pExp.Name;
+                var columns = this.Context.SugarContext.Context.EntityMaintenance.GetEntityInfo(pExp.Type).Columns;
+                if (columns.Count==0&&pExp.Type.IsValueType && pExp.Type != typeof(string)) 
+                {
+                    columns = new List<EntityColumnInfo>() { new EntityColumnInfo() { UnderType=UtilMethods.GetUnderType( pExp.Type) ,PropertyName=pExp.Type.Name,DbTableName= pExp.Type.Name } };
+                }
                 model.Args.Add(new MethodCallExpressionArgs()
                 {
                     MemberValue = new ListAnyParameter()
                     {
                         Sql = sql,
                         Name = pname,
-                        Columns = this.Context.SugarContext.Context.EntityMaintenance.GetEntityInfo(pExp.Type).Columns,
+                        Columns = columns,
                         ConvetColumnFunc = this.Context.GetTranslationColumnName
                     }
                 });
+                if (lamExp.Body is MethodCallExpression callExpression)
+                {
+                    var callObject = callExpression.Object;
+
+                    if (callObject is MemberExpression memberExpression && memberExpression?.Expression is ParameterExpression parameterExpression)
+                    {
+                        var entity = this.Context.SugarContext.Context.EntityMaintenance.GetEntityInfo(parameterExpression.Type);
+                        var columnInfo = entity.Columns.FirstOrDefault(it => it.PropertyName == memberExpression.Member.Name);
+                        model.DataObject = columnInfo;
+                    }
+                }
                 if (this.Context.IsSingle && this.Context.SingleTableNameSubqueryShortName == null)
                 {
                     ParameterExpressionVisitor visitor = new ParameterExpressionVisitor();
@@ -442,6 +458,12 @@ namespace SqlSugar
                 isRemoveParamter = true;
                 isNegate = true;
             }
+            else if (name == "IIF"&&item is MemberExpression member&& member?.Expression is BinaryExpression&& ExpressionTool.GetParameters(member).Count>0) 
+            { 
+                parameter.CommonTempData = GetNewExpressionValue(member);
+                isRemoveParamter = true;
+                isNegate = true;
+            }
             else
             {
                 base.Start();
@@ -500,7 +522,7 @@ namespace SqlSugar
                     List<object> result = new List<object>();
                     foreach (var memItem in (value as IList))
                     {
-                        result.Add(GetMemberValue(memItem, args.Last()));
+                        result.Add(GetMemberValue(memItem, args.Last(), out SugarParameter outConvertParameter));
                     }
                     value = result;
                 }
@@ -662,6 +684,10 @@ namespace SqlSugar
                 {
                     name = "IsNullOrEmpty";
                 }
+                if (model.Conext == null) 
+                {
+                    model.Conext = this.Context;
+                }
                 switch (name)
                 {
                     case "IIF":
@@ -782,6 +808,10 @@ namespace SqlSugar
                         if (model.Args.Count > 1)
                         {
                             var dateString2 = this.Context.DbMehtods.GetDateString(model.Args.First().MemberName.ObjToString(), model.Args.Last().MemberValue.ObjToString());
+                            if (IsSqlServerModel())
+                            {
+                                 return string.Format("FORMAT({0},'{1}','en-US')", model.Args.First().MemberName.ObjToString(), model.Args.Last().MemberValue.ObjToString());
+                            }
                             if (dateString2 != null) return dateString2;
                             return GeDateFormat(model.Args.Last().MemberValue.ObjToString(), model.Args.First().MemberName.ObjToString());
                         }
@@ -862,6 +892,10 @@ namespace SqlSugar
                         }
                         return result1;
                     case "GetDate":
+                        if (this.Context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer) 
+                        {
+                            return "GetDate()";
+                        }
                         return this.Context.DbMehtods.GetDate();
                     case "GetRandom":
                         return this.Context.DbMehtods.GetRandom();
@@ -995,6 +1029,11 @@ namespace SqlSugar
             return null;
         }
 
+        private bool IsSqlServerModel()
+        {
+            return this.Context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
+        }
+
         private string GetLike(string result, bool iLike)
         {
             if (iLike) 
@@ -1020,8 +1059,32 @@ namespace SqlSugar
 
         private bool IsContainsArray(MethodCallExpression express, string methodName, bool isValidNativeMethod)
         {
+            if (isMemoryExtensionsContainsArray(express, methodName)) 
+            {
+                return true;
+            }
             return !isValidNativeMethod && express.Method.DeclaringType.Namespace.IsIn("System.Collections", "System.Linq", "System.Collections.Generic") && methodName == "Contains";
         }
+        private bool isMemoryExtensionsContainsArray(MethodCallExpression express, string methodName)
+        {
+            var isMemoryExtensionsContainsArray = false;
+            if (express.Method.DeclaringType.Name == "MemoryExtensions" && methodName == "Contains")
+            {
+                if (express.Arguments.Count() == 2)
+                {
+                    if (express.Arguments.First() is MethodCallExpression callExpression)
+                    {
+                        if (callExpression.Method.Name == "op_Implicit")
+                        {
+                            isMemoryExtensionsContainsArray = true;
+                        }
+                    }
+                }
+            }
+
+            return isMemoryExtensionsContainsArray;
+        }
+
         private bool IsSubMethod(MethodCallExpression express, string methodName)
         {
             return SubTools.SubItemsConst.Any(it => it.Name == methodName) && express.Object != null && (express.Object.Type.Name.StartsWith("Subqueryable`"));

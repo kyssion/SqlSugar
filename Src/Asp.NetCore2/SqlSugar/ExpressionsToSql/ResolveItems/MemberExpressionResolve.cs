@@ -321,7 +321,7 @@ namespace SqlSugar
                     DefaultOneToOne(parameter, baseParameter, isLeft, isSetTempData, nav);
                 }
             }
-            else if (navN.IsNavgate(expression))
+            else if (navN.IsNavgate(expression)&&ExpressionTool.GetParameters(expression).Any())
             {
                 DefaultOneToOneN(parameter, baseParameter, isLeft, isSetTempData, navN);
             }
@@ -606,6 +606,7 @@ namespace SqlSugar
                 parameter.CommonTempData = base.GetNewExpressionValue(this.Expression);
                 var result = this.Context.DbMehtods.DateValue(new MethodCallExpressionModel()
                 {
+                    Conext=this.Context,
                     Args = new List<MethodCallExpressionArgs>() {
                      new MethodCallExpressionArgs() { IsMember = !isConst, MemberName = parameter.CommonTempData, MemberValue = null },
                      new MethodCallExpressionArgs() { IsMember = true, MemberName = name, MemberValue = name }
@@ -624,8 +625,13 @@ namespace SqlSugar
                 {
                     parameter.CommonTempData = base.AppendParameter(parameter.CommonTempData);
                 }
+                else if (parameter.CommonTempData  is MapperSql mapperSql)
+                {
+                    parameter.CommonTempData = mapperSql.Sql;
+                }
                 var result = this.Context.DbMehtods.DateValue(new MethodCallExpressionModel()
                 {
+                    Conext=this.Context,
                     Args = new List<MethodCallExpressionArgs>() {
                      new MethodCallExpressionArgs() { IsMember = !isConst, MemberName = parameter.CommonTempData, MemberValue = null },
                      new MethodCallExpressionArgs() { IsMember = true, MemberName = name, MemberValue = name }
@@ -778,7 +784,14 @@ namespace SqlSugar
             string shortName = expression.Expression.ToString();
             string fieldName = expression.Member.Name;
             fieldName = this.Context.GetDbColumnName(expression.Expression.Type.Name, fieldName);
-            fieldName = Context.GetTranslationColumnName(shortName + UtilConstants.Dot + fieldName);
+            if (UtilMethods.GetMoreSetting(this.Context).IsCorrectErrorSqlParameterName)
+            {
+                fieldName = Context.GetTranslationColumnName(shortName) + UtilConstants.Dot + Context.GetTranslationColumnName(fieldName);
+            }
+            else
+            {
+                fieldName = Context.GetTranslationColumnName(shortName + UtilConstants.Dot + fieldName);
+            }
             return fieldName;
         }
 
@@ -795,6 +808,10 @@ namespace SqlSugar
                 fieldName = fieldName.Replace(UtilConstants.Space, guid);
             }
             fieldName = Context.GetTranslationColumnName(fieldName);
+            if (this.Context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.IsCorrectErrorSqlParameterName == true&& fieldName?.Contains(ExpressionConst.LeftParenthesis)==true)
+            {
+                fieldName = Context.GetTranslationText(fieldName);
+            }
             if (isSpace)
             {
                 fieldName = fieldName.Replace(guid, UtilConstants.Space);
@@ -806,6 +823,7 @@ namespace SqlSugar
         {
             var pars = new MethodCallExpressionModel()
             {
+                Conext=this.Context,
                 Args = new List<MethodCallExpressionArgs>() {
                              new MethodCallExpressionArgs() {  IsMember=true, MemberName=value, MemberValue=value },
                              new MethodCallExpressionArgs() {   MemberName=type, MemberValue=type}

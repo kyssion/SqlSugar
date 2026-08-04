@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -51,9 +52,21 @@ namespace SqlSugar
                 {
                     return GetDateTimeOffsetString(value);
                 }
+                else if (value is decimal decValue)
+                {
+                    return decValue.ToString(CultureInfo.InvariantCulture);
+                }
+                else if (value is double douValue)
+                {
+                    return douValue.ToString(CultureInfo.InvariantCulture);
+                }
                 else if (type == UtilConstants.ByteArrayType)
                 {
                     string bytesString = "0x" + BitConverter.ToString((byte[])value).Replace("-", "");
+                    if (bytesString == "0x") 
+                    {
+                        bytesString = "''";
+                    }
                     return bytesString;
                 }
                 else if (type.IsEnum())
@@ -154,8 +167,14 @@ namespace SqlSugar
                         batchInsetrSql.Append("),  ");
                     }
                 }
-
-                batchInsetrSql.AppendLine(";select @@IDENTITY");
+                if (DorisHelper.IsDoris(this.Context))
+                {
+                    //doris insert ignore
+                }
+                else
+                {
+                    batchInsetrSql.AppendLine(";select @@IDENTITY");
+                }
                 var result = batchInsetrSql.ToString();
                 result = GetMySqlIgnore(result);
                 return result;

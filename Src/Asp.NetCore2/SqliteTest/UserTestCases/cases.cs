@@ -3,10 +3,11 @@ using OrmTest;
 
 namespace SqliteTest.UnitTest
 {
-    public class cases
+    public class Cases
     {
         public static void Init()
         {
+            Unitsdfasysd12.Init();
             Unitafadsf12yy.Init();
             Unitadfadsyyy.Init();
             //Demo

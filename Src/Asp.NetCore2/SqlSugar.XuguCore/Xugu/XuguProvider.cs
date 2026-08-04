@@ -118,11 +118,41 @@ namespace SqlSugar.Xugu
                 int result = 0;
                 foreach (var item in sqlParts)
                 {
-                    if (item.TrimStart('\r').TrimStart('\n') != "") result += base.ExecuteCommand(item, parameters);
+                    if (item.TrimStart('\r').TrimStart('\n') != "") result += base.ExecuteCommand(item,CopySugarParameters(parameters.ToList()));
                 }
                 return result;
             }
             else return base.ExecuteCommand(sql, parameters);
+        }
+        public List<SugarParameter> CopySugarParameters(List<SugarParameter> pars)
+        {
+            if (pars == null) return null;
+            var newParameters = pars.Select(it => new SugarParameter(it.ParameterName, it.Value)
+            {
+                TypeName = it.TypeName,
+                Value = it.Value,
+                IsRefCursor = it.IsRefCursor,
+                IsArray = it.IsArray,
+                IsJson = it.IsJson,
+                ParameterName = it.ParameterName,
+                IsNvarchar2 = it.IsNvarchar2,
+                IsNClob = it.IsClob,
+                IsClob = it.IsClob,
+                UdtTypeName = it.UdtTypeName,
+                CustomDbType = it.CustomDbType,
+                DbType = it.DbType,
+                Direction = it.Direction,
+                Precision = it.Precision,
+                Size = it.Size,
+                Scale = it.Scale,
+                IsNullable = it.IsNullable,
+                SourceColumn = it.SourceColumn,
+                SourceColumnNullMapping = it.SourceColumnNullMapping,
+                SourceVersion = it.SourceVersion,
+                TempDate = it.TempDate,
+                _Size = it._Size
+            });
+            return newParameters.ToList();
         }
         public override async Task<int> ExecuteCommandAsync(string sql, SugarParameter[] parameters)
         {
@@ -156,6 +186,7 @@ namespace SqlSugar.Xugu
         public override DbCommand GetCommand(string sql, SugarParameter[] parameters)
         {
             CheckSqlNull(sql);
+            sql = ReplaceKeyWordParameterName(sql, parameters);
             var helper = new XuguInsertBuilder();
             helper.Context = this.Context;
             //if (parameters != null)
@@ -279,5 +310,51 @@ namespace SqlSugar.Xugu
             else if (parameter.DbType == System.Data.DbType.UInt64) return System.Data.DbType.Int64;
             else return parameter.DbType;
         }
+
+        private static string[] KeyWord = new string[] { ":time","@time","@table",":table",":number","@number","@month", ":month", ":day", "@day", "@group", ":group", ":index", "@index", "@order", ":order", "@user", "@level", ":user", ":level", ":type", "@type", ":year", "@year", "@date", ":date" };
+        private static string ReplaceKeyWordParameterName(string sql, SugarParameter[] parameters)
+        {
+            sql = ReplaceKeyWordWithAd(sql, parameters);
+            if (parameters.HasValue())
+            {
+                foreach (var Parameter in parameters.OrderByDescending(x => x.ParameterName?.Length))
+                {
+                    if (Parameter.ParameterName != null && Parameter.ParameterName.ToLower().IsContainsStartWithIn(KeyWord))
+                    {
+                        if (parameters.Count(it => it.ParameterName.StartsWith(Parameter.ParameterName)) == 1)
+                        {
+                            var newName = Parameter.ParameterName + "_01";
+                            newName = newName.Insert(1, "KW");
+                            sql = Regex.Replace(sql, Parameter.ParameterName, newName, RegexOptions.IgnoreCase);
+                            Parameter.ParameterName = newName;
+                        }
+                        else if (Parameter.ParameterName.ToLower().IsContainsIn(KeyWord))
+                        {
+                            Check.ExceptionEasy($" {Parameter.ParameterName} is key word", $"{Parameter.ParameterName}是关键词");
+                        }
+                    }
+                }
+            }
+
+            return sql;
+        }
+
+        private static string ReplaceKeyWordWithAd(string sql, SugarParameter[] parameters)
+        {
+            if (parameters != null && sql != null && sql.Contains("@"))
+            {
+                foreach (var item in parameters.OrderByDescending(it => it.ParameterName.Length))
+                {
+                    if (item.ParameterName.StartsWith("@"))
+                    {
+                        item.ParameterName = ":" + item.ParameterName.TrimStart('@');
+                    }
+                    sql = Regex.Replace(sql, "@" + item.ParameterName.TrimStart(':'), item.ParameterName, RegexOptions.IgnoreCase);
+                }
+            }
+
+            return sql;
+        }
+
     }
 }

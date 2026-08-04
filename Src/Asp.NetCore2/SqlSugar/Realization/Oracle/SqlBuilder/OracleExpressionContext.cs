@@ -76,6 +76,11 @@ namespace SqlSugar
     }
     public partial class OracleMethod : DefaultDbMethod, IDbMethods
     {
+        public override string UNIX_TIMESTAMP(MethodCallExpressionModel model)
+        {
+            var parameterNameA = model.Args[0].MemberName;
+            return $" (CAST({parameterNameA} AS DATE) - DATE '1970-01-01') * 86400 ";
+        }
         public override string IsNullOrEmpty(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
@@ -238,11 +243,10 @@ namespace SqlSugar
             switch (type)
             {
                 case DateType.Year:
-                    time = 1 * 365;
-                    break;
+                    // 每年 = 12 个月
+                    return $"ADD_MONTHS({parameter.MemberName}, ({parameter2.MemberName}) * 12)";
                 case DateType.Month:
-                    time = 1 *30;
-                    break;
+                    return $"ADD_MONTHS({parameter.MemberName}, {parameter2.MemberName})";
                 case DateType.Day:
                     break;
                 case DateType.Hour:
@@ -318,11 +322,51 @@ namespace SqlSugar
         {
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
-            return string.Format(" ( cast({0} as date)= cast( {1} as date) ) ", parameter.MemberName, parameter2.MemberName); ;
+            return string.Format("(TRUNC({0}) = TRUNC({1}))", parameter.MemberName, parameter2.MemberName);
         }
         public override string DateIsSameByType(MethodCallExpressionModel model)
         {
-            throw new NotSupportedException("Oracle NotSupportedException DateIsSameDay");
+            var parameter = model.Args[0];
+            var parameter2 = model.Args[1];
+            var parameter3 = model.Args[2];
+
+            var dateType = parameter3.MemberValue.ObjToString().ToLower();
+            var date1 = parameter.MemberName;
+            var date2 = parameter2.MemberName;
+
+            if (dateType == "year")
+            {
+                return string.Format("(EXTRACT(YEAR FROM {0}) = EXTRACT(YEAR FROM {1}))", date1, date2);
+            }
+            else if (dateType == "month")
+            {
+                return string.Format("(EXTRACT(YEAR FROM {0}) = EXTRACT(YEAR FROM {1}) AND EXTRACT(MONTH FROM {0}) = EXTRACT(MONTH FROM {1}))", date1, date2);
+            }
+            else if (dateType == "day")
+            {
+                return string.Format("(TRUNC({0}) = TRUNC({1}))", date1, date2);
+            }
+            else if (dateType == "hour")
+            {
+                return string.Format("(TRUNC({0}, 'HH24') = TRUNC({1}, 'HH24'))", date1, date2);
+            }
+            else if (dateType == "minute")
+            {
+                return string.Format("(TRUNC({0}, 'MI') = TRUNC({1}, 'MI'))", date1, date2);
+            }
+            else if (dateType == "second")
+            {
+                return string.Format("(TRUNC({0}, 'SS') = TRUNC({1}, 'SS'))", date1, date2);
+            }
+            else if (dateType == "week" || dateType == "weekday")
+            {
+                return string.Format("(TRUNC({0}, 'IW') = TRUNC({1}, 'IW'))", date1, date2);
+            }
+            else
+            {
+                // 默认按天比较
+                return string.Format("(TRUNC({0}) = TRUNC({1}))", date1, date2);
+            }
         }
         public override string Length(MethodCallExpressionModel model)
         {
@@ -391,7 +435,7 @@ namespace SqlSugar
         {
             var parameterNameA = mode.Args[0].MemberName;
             var parameterNameB = mode.Args[1].MemberName;
-            return $" SUBSTR({parameterNameA}, -2, {parameterNameB})  ";
+            return $" SUBSTR({parameterNameA}, -{parameterNameB}, {parameterNameB})  ";  //hdl 20260121
         }
 
         public override string Ceil(MethodCallExpressionModel mode)

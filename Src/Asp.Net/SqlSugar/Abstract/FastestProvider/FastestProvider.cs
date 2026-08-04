@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Text;
@@ -7,6 +7,7 @@ using System.Linq;
 using System.Threading;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Linq.Expressions;
 namespace SqlSugar 
 {
     public partial class FastestProvider<T>:IFastest<T> where T:class,new()
@@ -61,6 +62,10 @@ namespace SqlSugar
         {
             if (Size > 0)
             {
+                if (this.GetBuider()?.DbFastestProperties?.NoPage == true) 
+                {
+                    Size = int.MaxValue/2;
+                }
                 int resul=0;
                  await this.context.Utilities.PageEachAsync(datas, Size, async item =>
                 {
@@ -198,6 +203,18 @@ namespace SqlSugar
             var result = (Task<int>)bulkCopyMethod.Invoke(fastestMethod, new object[] { newValue });
             return result;
         }
+        public int BulkMerge(DataTable dataTable, string[] whereColumns, string[] updateColumns, bool isIdentity)
+        {
+            return BulkMergeAsync(dataTable, whereColumns, updateColumns, isIdentity).GetAwaiter().GetResult();
+        }
+        public Task<int> BulkMergeAsync(DataTable dataTable, string[] whereColumns, string[] updateColumns, bool isIdentity) 
+        {
+            object newValue, fastestMethod;
+            MethodInfo bulkCopyMethod;
+            _BulkMerge(dataTable, whereColumns,updateColumns, out newValue, out fastestMethod, out bulkCopyMethod, true, isIdentity);
+            var result = (Task<int>)bulkCopyMethod.Invoke(fastestMethod, new object[] { newValue,whereColumns,updateColumns });
+            return result;
+        }
         public Task<int> BulkMergeAsync(List<T> datas, string[] whereColumns)
         {
             var updateColumns = entityInfo.Columns.Where(it => !it.IsPrimarykey && !it.IsIdentity && !it.IsOnlyIgnoreUpdate && !it.IsIgnore).Select(it => it.DbColumnName ?? it.PropertyName).ToArray();
@@ -226,6 +243,21 @@ namespace SqlSugar
         public int BulkMerge(List<T> datas, string[] whereColumns, string[] updateColumns)
         {
             return BulkMergeAsync(datas, whereColumns, updateColumns).GetAwaiter().GetResult();
+        }
+
+        public async Task<int> BulkMergeAsync(List<T> datas, Expression<Func<T, object>> whereColumnsExp, Expression<Func<T, object>> updateColumnsExp)
+        { 
+            // 1. 获取 whereColumns
+            var whereColumns =ExpressionTool.GetNewExpressionItemListNew((whereColumnsExp as LambdaExpression).Body).Select(it=>it.Key).ToArray();
+            // 2. 获取 updateColumns
+            var updateColumns = ExpressionTool.GetNewExpressionItemListNew((updateColumnsExp as LambdaExpression).Body).Select(it => it.Key).ToArray(); 
+
+            // 3. 调用 BulkMergeAsync
+            return await BulkMergeAsync(datas, whereColumns, updateColumns);
+        }
+        public int BulkMerge(List<T> datas, Expression<Func<T, object>> whereColumnsExp, Expression<Func<T, object>> updateColumnsExp)
+        {
+            return BulkMergeAsync(datas, whereColumnsExp, updateColumnsExp).GetAwaiter().GetResult();
         }
 
         private async Task<int> _BulkMerge(List<T> datas, string[] updateColumns, string[] whereColumns)
@@ -280,7 +312,12 @@ namespace SqlSugar
             foreach (DataColumn item in dataTable.Columns)
             {
                 var isPrimaryKey = whereColumns.Any(it => it.EqualCase(item.ColumnName));
-                builder.CreateProperty(item.ColumnName,typeof(Nullable<>).MakeGenericType(item.DataType), new SugarColumn()
+                var propertyType = item.DataType;
+                if (!propertyType.IsClass()&& propertyType!=typeof(string) && propertyType != typeof(byte[]))
+                {
+                    propertyType=typeof(Nullable<>).MakeGenericType(UtilMethods.GetUnderType(item.DataType));
+                }
+                builder.CreateProperty(item.ColumnName, propertyType, new SugarColumn()
                 {
                     IsPrimaryKey = isPrimaryKey,
                     IsIdentity=isIdentity&& isPrimaryKey,
@@ -298,17 +335,53 @@ namespace SqlSugar
                                   .Invoke(this.context, null);
             bulkCopyMethod = fastestMethod.GetType().GetMyMethod(isAsync? "BulkMergeAsync" : "BulkMerge", 1);
         }
+        private void _BulkMerge(DataTable dataTable, string[] whereColumns,string [] updateColumns, out object newValue, out object fastestMethod, out MethodInfo bulkCopyMethod, bool isAsync, bool isIdentity)
+        {
+            Check.ExceptionEasy(this.AsName.IsNullOrEmpty(), "need .AS(tablaeName) ", "需要 .AS(tablaeName) 设置表名");
+            var className = "BulkMerge_" + isIdentity + this.AsName.GetNonNegativeHashCodeString();
+            var builder = this.context.DynamicBuilder().CreateClass(className, new SugarTable()
+            {
+                TableName = this.AsName
+            });
+            foreach (DataColumn item in dataTable.Columns)
+            {
+                var isPrimaryKey = whereColumns.Any(it => it.EqualCase(item.ColumnName));
+                var propertyType = item.DataType;
+                if (!propertyType.IsClass() && propertyType != typeof(string) && propertyType != typeof(byte[]))
+                {
+                    propertyType = typeof(Nullable<>).MakeGenericType(UtilMethods.GetUnderType(item.DataType));
+                }
+                builder.CreateProperty(item.ColumnName, propertyType, new SugarColumn()
+                {
+                    IsPrimaryKey = isPrimaryKey,
+                    IsIdentity = isIdentity && isPrimaryKey,
+                    IsNullable = true,
+
+                });
+            }
+            var dicList = this.context.Utilities.DataTableToDictionaryList(dataTable);
+            var type = builder.WithCache().BuilderType();
+            var value = this.context.DynamicBuilder().CreateObjectByType(type, dicList);
+            newValue = UtilMethods.ConvertToObjectList(type, value);
+            fastestMethod = this.context.GetType()
+                                  .GetMethod("Fastest")
+                                  .MakeGenericMethod(type)
+                                  .Invoke(this.context, null);
+            bulkCopyMethod = fastestMethod.GetType().GetMyMethod(isAsync ? "BulkMergeAsync" : "BulkMerge", 3, newValue.GetType(), typeof(string[]), typeof(string[]));
+        }
 
         private async Task<int> _BulkUpdate(List<T> datas, string[] whereColumns, string[] updateColumns)
         {
+            var isAuto = this.context.CurrentConnectionConfig.IsAutoCloseConnection;
+            var isAutoOk = false;
+            var old = this.context.Ado.IsDisableMasterSlaveSeparation;
+            var oldOk = false;
             try
             {
                 Begin(datas, false);
                 Check.Exception(whereColumns == null || whereColumns.Count() == 0, "where columns count=0 or need primary key");
                 Check.Exception(updateColumns == null || updateColumns.Count() == 0, "set columns count=0");
-                var isAuto = this.context.CurrentConnectionConfig.IsAutoCloseConnection;
                 this.context.CurrentConnectionConfig.IsAutoCloseConnection = false;
-                var old = this.context.Ado.IsDisableMasterSlaveSeparation;
                 this.context.Ado.IsDisableMasterSlaveSeparation = true;
                 DataTable dt = ToDdateTable(datas);
                 IFastBuilder buider = GetBuider();
@@ -323,8 +396,10 @@ namespace SqlSugar
                     this.context.DbMaintenance.DropTable(dt.TableName);
                 }
                 this.context.CurrentConnectionConfig.IsAutoCloseConnection = isAuto;
-                buider.CloseDb(); 
+                isAutoOk = true;
+                buider.CloseDb();
                 this.context.Ado.IsDisableMasterSlaveSeparation = old;
+                oldOk = true;
                 End(datas, false);
                 return result;
             }
@@ -332,6 +407,14 @@ namespace SqlSugar
             {
                 this.context.Close();
                 throw;
+            }
+            finally 
+            {
+                if(!isAutoOk)
+                    this.context.CurrentConnectionConfig.IsAutoCloseConnection = isAuto;
+                if (!oldOk)
+                    this.context.Ado.IsDisableMasterSlaveSeparation = old;
+
             }
         }
 
@@ -359,6 +442,10 @@ namespace SqlSugar
                             else if (col.DataType == UtilConstants.DateType)
                             {
                                 item[col.ColumnName] =UtilMethods.GetMinDate(this.context.CurrentConnectionConfig);
+                            }
+                            else if (col.DataType == UtilConstants.ByteArrayType)
+                            {
+                                item[col.ColumnName] = null;
                             }
                             else
                             {

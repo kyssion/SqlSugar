@@ -69,6 +69,14 @@ namespace SqlSugar
                 {
                     return value.ObjToBool() ? "1" : "0";
                 }
+                else if (value is DateTimeOffset)
+                {
+                    return FormatDateTimeOffset(value);
+                }
+                else if (IsSqlOracleModel() && value is TimeSpan timeSpan)
+                {
+                    return $"'{timeSpan.Days} {timeSpan.Hours:00}:{timeSpan.Minutes:00}:{timeSpan.Seconds:00}.{timeSpan.Milliseconds:000}{timeSpan.Ticks % 10000:0000}'";
+                }
                 else if (type == UtilConstants.StringType || type == UtilConstants.ObjType)
                 {
                     return "'" + value.ToString().ToSqlFilter() + "'";
@@ -132,7 +140,8 @@ namespace SqlSugar
                     {
                         var columnInfo = tableColumnList.FirstOrDefault(x => x.DbColumnName.Equals(it.DbColumnName, StringComparison.OrdinalIgnoreCase));
                         var dbType = columnInfo?.DataType;
-                        if (dbType == null) {
+                        if (dbType == null)
+                        {
                             var typeName = it.PropertyType.Name.ToLower();
                             if (typeName == "int32")
                                 typeName = "int";
@@ -140,7 +149,7 @@ namespace SqlSugar
                                 typeName = "long";
                             if (typeName == "int16")
                                 typeName = "short";
-                            if (typeName == "boolean")  
+                            if (typeName == "boolean")
                                 typeName = "bool";
 
                             var isAnyType = PostgreSQLDbBind.MappingTypesConst.Where(x => x.Value.ToString().ToLower() == typeName).Any();
@@ -148,11 +157,46 @@ namespace SqlSugar
                             {
                                 dbType = PostgreSQLDbBind.MappingTypesConst.Where(x => x.Value.ToString().ToLower() == typeName).FirstOrDefault().Key;
                             }
-                            else {
+                            else
+                            {
                                 dbType = "varchar";
                             }
                         }
-                        return string.Format("CAST({0} AS {1})", base.GetDbColumn(it,FormatValue(it.Value)), dbType);
+                        if (IsMySqlModel())
+                        {
+                            if (dbType == "numeric")
+                            {
+                                dbType = "numeric(18,6)";
+                            }
+                            if (dbType.EqualCase("USER-DEFINED")&&it.Value is DateTime) 
+                            {
+                                dbType = "datetime";
+                            }
+                        }
+                        if (IsSqlServerModel())
+                        {
+                            if (dbType == "numeric")
+                            {
+                                dbType = "numeric(18,6)";
+                            }
+                            else if (dbType == "varchar")
+                            {
+                                dbType = "varchar(max)";
+                            }
+                            else if (dbType == "nvarchar")
+                            {
+                                dbType = "nvarchar(max)";
+                            }
+                            else if (dbType == "char")
+                            {
+                                dbType = "char(8000)";
+                            }
+                            else if (dbType == "nchar")
+                            {
+                                dbType = "nchar(4000)";
+                            }
+                        }
+                        return string.Format("CAST({0} AS {1})", base.GetDbColumn(it, FormatValue(it.Value)), dbType);
 
                     })) + ")");
                     ++i;
@@ -166,10 +210,10 @@ namespace SqlSugar
                     {
                         var isFirst = whereString == null;
                         whereString += (isFirst ? null : " AND ");
-                        whereString += item;
+                        whereString += item.Replace(" \"",$" {Builder.GetTranslationColumnName(this.EntityInfo.DbTableName)}.\"");
                     }
                 }
-                else if (PrimaryKeys.HasValue())
+                if (PrimaryKeys.HasValue())
                 {
                     foreach (var item in PrimaryKeys)
                     {
@@ -184,6 +228,16 @@ namespace SqlSugar
             }
             batchUpdateSql = GetBatchUpdateSql(batchUpdateSql);
             return batchUpdateSql.ToString();
+        }
+
+        private bool IsSqlServerModel()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
+        }
+
+        private bool IsMySqlModel()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.MySql;
         }
 
         private StringBuilder GetBatchUpdateSql(StringBuilder batchUpdateSql)
@@ -225,6 +279,10 @@ namespace SqlSugar
         {
             var date = UtilMethods.ConvertFromDateTimeOffset((DateTimeOffset)value);
             return "'" + date.ToString("yyyy-MM-dd HH:mm:ss.fff zzz") + "'";
+        }
+        private bool IsSqlOracleModel()
+        {
+            return this.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.Oracle;
         }
     }
 }

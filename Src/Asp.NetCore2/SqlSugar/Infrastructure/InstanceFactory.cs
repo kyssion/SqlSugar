@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 namespace SqlSugar
@@ -44,6 +45,10 @@ namespace SqlSugar
             else if (currentConnectionConfig.DbType == DbType.MySql)
             {
                 return new MySqlQueryable<T>();
+            }
+            else if (currentConnectionConfig.DbType == DbType.Sqlite)
+            {
+                return new SqliteQueryable<T>();
             }
             else if (currentConnectionConfig.DbType == DbType.PostgreSQL)
             {
@@ -251,6 +256,30 @@ namespace SqlSugar
             {
                 return new OracleUpdateable<T>();
             }
+            else if (IsCustomDb(currentConnectionConfig))
+            {
+                var name =
+                    "SqlSugar." + currentConnectionConfig.DbType +
+                    "." + currentConnectionConfig.DbType
+                    + "Updateable`1";
+                var type = GetCustomTypeByClass<T>(name);
+                if (type == null)
+                {
+                    name =
+                    InstanceFactory.CustomNamespace +
+                    "." + InstanceFactory.CustomDbName
+                    + "Updateable`1";
+                    type = GetCustomTypeByClass<T>(name);
+                }
+                if (type == null)
+                {
+                    return new UpdateableProvider<T>();
+                }
+                else
+                {
+                    return (UpdateableProvider<T>)Activator.CreateInstance(type, true);
+                }
+            }
             else
             {
                 return new UpdateableProvider<T>();
@@ -262,6 +291,30 @@ namespace SqlSugar
             if (currentConnectionConfig.DbType == DbType.Oracle)
             {
                 return new OracleDeleteable<T>();
+            }
+            else if (IsCustomDb(currentConnectionConfig))
+            {
+                var name =
+                    "SqlSugar." + currentConnectionConfig.DbType +
+                    "." + currentConnectionConfig.DbType
+                    + "Deleteable`1";
+                var type = GetCustomTypeByClass<T>(name);
+                if (type == null)
+                {
+                    name =
+                    InstanceFactory.CustomNamespace +
+                    "." + InstanceFactory.CustomDbName
+                    + "Deleteable`1";
+                    type = GetCustomTypeByClass<T>(name);
+                }
+                if (type == null)
+                {
+                    return new DeleteableProvider<T>();
+                }
+                else
+                {
+                    return (DeleteableProvider<T>)Activator.CreateInstance(type, true);
+                }
             }
             else
             {
@@ -294,6 +347,14 @@ namespace SqlSugar
                     "." + currentConnectionConfig.DbType
                     + "Insertable`1";
                 var type = GetCustomTypeByClass<T>(name);
+                if (type == null) 
+                {
+                    name =
+                    InstanceFactory.CustomNamespace +
+                    "." + InstanceFactory.CustomDbName
+                    + "Insertable`1";
+                    type = GetCustomTypeByClass<T>(name);
+                }
                 if (type == null)
                 {
                     return new InsertableProvider<T>();
@@ -304,15 +365,18 @@ namespace SqlSugar
                 }
             }
             else
-            {
+            { 
                 return new InsertableProvider<T>();
             }
         }
 
         private static bool IsCustomDb(ConnectionConfig currentConnectionConfig)
         {
-            return
-                            currentConnectionConfig.DbType != DbType.SqlServer &&
+            if (currentConnectionConfig.DbType == DbType.Custom) 
+            {
+                return true;
+            }
+            return currentConnectionConfig.DbType != DbType.SqlServer &&
                             currentConnectionConfig.DbType != DbType.Dm &&
                             currentConnectionConfig.DbType != DbType.Oscar &&
                             currentConnectionConfig.DbType != DbType.Access &&
@@ -324,6 +388,7 @@ namespace SqlSugar
                             currentConnectionConfig.DbType != DbType.GBase &&
                             currentConnectionConfig.DbType != DbType.Sqlite &&
                             GetCustomTypeByClass("SqlSugar." + currentConnectionConfig.DbType + "." + currentConnectionConfig.DbType + "Provider") != null;
+      
         }
 
         public static IDbBind GetDbBind(ConnectionConfig currentConnectionConfig)
@@ -399,6 +464,18 @@ namespace SqlSugar
             else if (type == "Custom")
             {
                 return CustomNamespace + "."+CustomDbName + name;
+            }
+            else if (type == "HANA")
+            {
+                return InstanceFactory.CustomDllName + "." + type + name;
+            }
+            else if (type == "DB2")
+            {
+                return "SqlSugar.DB2."+ type+ name;
+            }
+            else if (type == "GaussDBNative") 
+            {
+                return "SqlSugar.GaussDB.GaussDB"  + name;
             }
             else
             {
@@ -591,6 +668,10 @@ namespace SqlSugar
                             type = assembly.GetType(className);
                         }
                     }
+                    if (type == null)
+                    {
+                        type = GetCustomDbType(className, type);
+                    }
                     Check.ArgumentNullException(type, string.Format(ErrorMessage.ObjNotExist, className));
                     if (!typeCache.ContainsKey(className))
                     {
@@ -663,6 +744,10 @@ namespace SqlSugar
             var newAssembly = new ReflectionInoCacheService().GetOrCreate<Assembly>(key, () => {
                 try
                 {
+                    if (string.IsNullOrEmpty(customDllName)&& CustomAssemblies?.Any() == true) 
+                    {
+                        customDllName = CustomAssemblies.First().GetName().Name;
+                    }
                     if (CustomAssemblies?.Any(it => it.FullName.StartsWith(customDllName))==true) 
                     {
                         return CustomAssemblies?.First(it => it.FullName.StartsWith(customDllName));

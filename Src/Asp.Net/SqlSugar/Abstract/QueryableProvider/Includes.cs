@@ -175,7 +175,12 @@ namespace SqlSugar
                     {
                         properyItemType = properyType.GetGenericArguments()[0];
                     }
-                    var exp = ExpressionBuilderHelper.CreateExpressionSelectField(typeof(T), item.PropertyName, properyType);
+                    var shortName = "it";
+                    if (this.QueryBuilder.TableShortName.HasValue()) 
+                    {
+                        shortName = this.QueryBuilder.TableShortName;
+                    }
+                    var exp = ExpressionBuilderHelper.CreateExpressionSelectField(typeof(T), item.PropertyName, properyType,shortName);
                     var method = this.GetType().GetMethods().Where(it => it.Name == "IncludesByExpression")
                         .First()
                         .MakeGenericMethod(properyItemType);
@@ -186,7 +191,7 @@ namespace SqlSugar
         }
         public ISugarQueryable<T> IncludesAllSecondLayer<TReturn1>(Expression<Func<T, TReturn1>> expression, params string[] ignoreProperyNameList) 
         {
-            this.Includes(expression);
+            //this.Includes(expression);
             var type = typeof(TReturn1);
             if (type.FullName.IsCollectionsList()) 
             {

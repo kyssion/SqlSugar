@@ -166,7 +166,16 @@ namespace SqlSugar
         public override string ToInt64(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
+            if (IsDorisDbType(model))
+            {
+                return string.Format(" CAST({0} AS BIGINT)", parameter.MemberName);
+            }
             return string.Format(" CAST({0} AS SIGNED)", parameter.MemberName);
+        }
+
+        private static bool IsDorisDbType(MethodCallExpressionModel model)
+        {
+            return model?.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.DbType == DbType.Doris;
         }
 
         public override string ToString(MethodCallExpressionModel model)
@@ -272,17 +281,21 @@ namespace SqlSugar
         {
             if (memberName1?.ToString()?.Contains("->") == true)
             {
-                return $"{memberName1.ToString().TrimEnd('"')}.{memberName2}\"";
+                return $"{memberName1.ToString().TrimEnd('\'')}.{memberName2}'";
             }
             else
             {
-                return $"{memberName1}->\"$.{memberName2}\"";
+                return $"{memberName1}->'$.{memberName2}'";
             }
         }
 
         public override string JsonArrayAny(MethodCallExpressionModel model)
         {
-            if (UtilMethods.IsNumber(model.Args[1].MemberValue.GetType().Name))
+            if (model.Args[1].MemberValue==null)
+            {
+                return $" JSON_CONTAINS({model.Args[0].MemberName},  JSON_QUOTE({model.Args[1].MemberName}) )";
+            }
+            else if (UtilMethods.IsNumber(model.Args[1].MemberValue.GetType().Name))
             {
                 return $" JSON_CONTAINS({model.Args[0].MemberName}, '{model.Args[1].MemberValue}')";
             }

@@ -5,11 +5,61 @@ using System.Globalization;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
+ using System.Text;
 namespace SqlSugar
 {
     public class ExpressionTool
     {
+        public static bool ContainsTwoLevelAccess(Expression exp)
+        {
+            var result = false;
+
+            if (exp is LambdaExpression lambda &&
+                lambda.Body is MemberInitExpression initExpr)
+            {
+                var param = lambda.Parameters[0];
+
+                foreach (var binding in initExpr.Bindings)
+                {
+                    if (binding is MemberAssignment assign)
+                    {
+                        if (assign.Expression is MemberExpression outer &&
+                            outer.Expression is MemberExpression inner &&
+                            inner.Expression == param)
+                        {
+                            result = true;
+                            break; // 已经找到了，就退出循环
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        public static string GetMemberNameByMethod(Expression expression, string name)  
+        {
+            if (expression is LambdaExpression lambda)
+            {
+                if (lambda.Body is MethodCallExpression method)
+                {
+                    if (method.Method.Name == "ToList")
+                    {
+                        var arg = method.Arguments.FirstOrDefault();
+                        if (arg!=null)
+                        {
+                            if (arg is MemberExpression member)
+                            {
+                                name = member.Member.Name;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return name;
+        }
+
         internal static string ResolveMemberValue(ExpressionContext context, Expression item, string value)
         {
             if (item is MemberExpression member)
@@ -253,7 +303,19 @@ namespace SqlSugar
                 GetTopLevelMethodCalls(lambdaExpression.Body, methodCalls);
             }
         }
-
+        public static Dictionary<string, Expression> GetNewExpressionItemListNew(Expression lamExp)
+        {
+            var caseExp = GetLambdaExpressionBody(lamExp); 
+            caseExp = ExpressionTool.RemoveConvert(lamExp);
+            if (caseExp is MemberExpression c)
+            {
+                return new Dictionary<string, Expression>() { { c.Member.Name, c } };
+            }
+            else 
+            {
+                return GetNewExpressionItemList(lamExp);
+            }
+        }
         public static Dictionary<string, Expression> GetNewExpressionItemList(Expression lamExp)
         {
             var caseExp = GetLambdaExpressionBody(lamExp);
@@ -309,9 +371,15 @@ namespace SqlSugar
         }
         public static List<ParameterExpression> GetParameters(Expression expr)
         {
-            var ps = new ParameterExpressionVisitor();
+            var ps = new ParameterExpressionVisitor(); 
             ps.Visit(expr);
             return ps.Parameters;
+        }
+        public static bool NoParameterOrSqlfunc(Expression expr)
+        {
+            var ps = new ParameterExpressionVisitor();
+            ps.Visit(expr);
+            return ps.Parameters.Count==0&&ps.IsSqlFunc==false;
         }
         public static bool IsComparisonOperatorBool(BinaryExpression binaryExp)
         {
@@ -562,7 +630,7 @@ namespace SqlSugar
                 {
                     if (objReference == null) 
                     {
-                        Check.ExceptionEasy($"Expression error {rootExpression?.ToString()} expression, An empty reference appears in the expression to check if the parameter is null ", $"表达式错误 {rootExpression?.ToString()} 表达式中出现了空引用 检查参数是否为null ");
+                        return null;
                     }
                     var objProp = objReference.GetType().GetProperties().Where(it=>it.Name== mi.Name).FirstOrDefault();
                     if (objProp == null)
@@ -845,7 +913,7 @@ namespace SqlSugar
                 }
                 else
                 {
-                    var value = baseResolve.GetNewExpressionValue(memberAssignment.Expression);
+                    var value = baseResolve.GetNewExpressionValue(ExpressionTool.RemoveConvert(memberAssignment.Expression));
                     //var leftInfo = keys[i];
                     additem.Type = nameof(ConstantExpression);
                     additem.RightName = memberAssignment.Member.Name;
@@ -878,7 +946,24 @@ namespace SqlSugar
                     additem.ShortName = member.Expression + "";
                     additem.RightName = member.Member.Name;
                     additem.RightDbName = context.GetDbColumnName(entityName, additem.RightName);
+                    var isNavMember = member.Expression != null
+                        && ExpressionTool.IsNavMember(context, member.Expression);
                     additem.LeftNameName = member.Member.Name;
+                    if (isNavMember && (context?.SugarContext?.QueryBuilder?.JoinQueryInfos?.Count()??0)==0) 
+                    { 
+                        var exp = context.GetCopyContextWithMapping();
+                        exp.Resolve(member, ResolveExpressType.FieldSingle);
+                        var sql = exp.Result.GetResultString();
+                        if (context.IsSingle&& context.CurrentShortName.IsNullOrEmpty()) 
+                        {
+                            context.SingleTableNameSubqueryShortName=ExpressionTool.GetParameters(member)?.FirstOrDefault()?.Name;
+                        }
+                        additem.RightDbName = sql;
+                    }
+                    else if (isNavMember &&  context?.SugarContext?.QueryBuilder?.JoinQueryInfos?.Any(it=>it.ShortName?.StartsWith("pnv_" + ExpressionTool.GetMemberName(member.Expression)) ==true)==true)
+                    {
+                        additem.ShortName = "pnv_"+ExpressionTool.GetMemberName(member.Expression);
+                    }
                     //additem.Value = "";
                     result.Add(additem);
                 }

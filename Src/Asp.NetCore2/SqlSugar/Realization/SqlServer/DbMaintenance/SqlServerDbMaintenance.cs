@@ -322,6 +322,13 @@ namespace SqlSugar
         #endregion
 
         #region Methods
+        public override bool DropIndex(string indexName, string tableName)
+        {
+            indexName = this.SqlBuilder.GetTranslationColumnName(indexName);
+            tableName = this.SqlBuilder.GetTranslationColumnName(tableName);
+            this.Context.Ado.ExecuteCommand($" DROP INDEX  {indexName}  ON {tableName}");
+            return true;
+        }
         public override bool SetAutoIncrementInitialValue(string tableName,int initialValue)
         {
             this.Context.Ado.ExecuteCommand($"DBCC CHECKIDENT ('"+ tableName + $"', RESEED, {initialValue})");
@@ -430,6 +437,7 @@ AND syscomments.text LIKE '%"+tableName+"%'");
                 if (!schema.EqualCase("dbo"))
                 {
                     temp = temp.Replace("N'user'", $"N'schema'");
+                    temp = temp.Replace("'user'", $"N'schema'");
                 }
                 string sql = string.Format(temp, columnName, tableName);
                 this.Context.Ado.ExecuteCommand(sql);
@@ -490,7 +498,7 @@ AND syscomments.text LIKE '%"+tableName+"%'");
             ConvertCreateColumnInfo(column);
             if (column.DataType != null && this.Context.CurrentConnectionConfig?.MoreSettings?.SqlServerCodeFirstNvarchar == true)
             {
-                if (!column.DataType.ToLower().Contains("nvarchar"))
+                if (!column.DataType.ToLower().Contains("nvarchar") && !column.DataType.EndsWith(")"))
                 {
                     column.DataType = column.DataType.ToLower().Replace("varchar", "nvarchar");
                 }
@@ -718,7 +726,7 @@ AND syscomments.text LIKE '%"+tableName+"%'");
                 }
                 else if (item.DataType != null && this.Context.CurrentConnectionConfig?.MoreSettings?.SqlServerCodeFirstNvarchar == true)
                 {
-                    if (!item.DataType.ToLower().Contains("nvarchar"))
+                    if (!item.DataType.ToLower().Contains("nvarchar")&&!item.DataType.EndsWith(")"))
                     {
                         item.DataType = item.DataType.ToLower().Replace("varchar", "nvarchar");
                     }

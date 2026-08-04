@@ -10,7 +10,7 @@ using System.Reflection;
 using System.Dynamic;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Serialization;
-
+ 
 namespace SqlSugar
 {
 
@@ -121,8 +121,23 @@ namespace SqlSugar
                 this.QueryBuilder.Includes == null &&
                 this.QueryBuilder.IsDistinct == false)
             {
-
+                if (StaticConfig.EnableAot) 
+                {
+                    var sqlobj = this.Clone().Select<int>(" COUNT(1) ").ToSql();
+                    return this.Context.Ado.GetInt(sqlobj.Key,sqlobj.Value);
+                }
                 return this.Clone().Select<int>(" COUNT(1) ").ToList().FirstOrDefault();
+            }
+            if (this.QueryBuilder.AsTables?.Any() == true)
+            {
+                var tableName = this.QueryBuilder.AsTables.FirstOrDefault().Value;
+                if (tableName.StartsWith(" (SELECT * FROM  ("))
+                {
+                    var copyDb = this.Clone();
+                    copyDb.QueryBuilder.OrderByValue = null;
+                    var list = copyDb.Select<int>(" COUNT(1) ").ToList();
+                    return list.FirstOrDefault();
+                }
             }
             MappingTableList expMapping;
             int result;
@@ -449,6 +464,43 @@ namespace SqlSugar
             }
             return ToDataTable();
         }
+
+        public DataTable ToOffsetDataTablePage(int pageNumber, int pageSize) 
+        {
+            if (this.Context.CurrentConnectionConfig.DbType != DbType.SqlServer)
+            {
+                this.QueryBuilder.Offset = "true";
+                return this.ToDataTablePage(pageNumber, pageSize);
+            }
+            else
+            {
+                _ToOffsetPage(pageNumber, pageSize);
+                return this.ToDataTable();
+            }
+        }
+        public DataTable ToOffsetDataTablePage(int pageNumber, int pageSize, ref int totalNumber) 
+        {
+            if (this.Context.CurrentConnectionConfig.DbType != DbType.SqlServer)
+            {
+                this.QueryBuilder.Offset = "true";
+                return this.ToDataTablePage(pageNumber, pageSize, ref totalNumber);
+            }
+            else
+            {
+                totalNumber = this.Clone().Count();
+                _ToOffsetPage(pageNumber, pageSize);
+                return this.Clone().ToDataTable();
+            }
+        }
+        public DataTable ToOffsetDataTableByEntityPage(int pageNumber, int pageSize, ref int totalNumber) 
+        {
+            return this.Context.Utilities.ListToDataTable(this.ToOffsetPage(pageNumber, pageSize,ref totalNumber));
+        }
+        public DataTable ToOffsetDataTablePage(int pageNumber, int pageSize, ref int totalNumber, ref int totalPage) 
+        {
+            return this.Context.Utilities.ListToDataTable(this.ToOffsetPage(pageNumber, pageSize, ref totalNumber,ref totalPage));
+        }
+
         public DataTable ToDataTableByEntityPage(int pageNumber, int pageSize, ref int totalNumber) 
         {
             var  list=this.ToPageList(pageNumber, pageSize,ref totalNumber);
@@ -652,7 +704,7 @@ namespace SqlSugar
             var entityInfo = this.Context.EntityMaintenance.GetEntityInfo<T>();
             var columns = UtilMethods.GetColumnInfo(dr); 
             var cacheKey = "ForEachDataReader"+typeof(T).GetHashCode()+string.Join(",", columns.Select(it => it.Item1+it.Item2.Name+"_"));
-            IDataReaderEntityBuilder<T> entytyList = this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate("cacheKey", () =>
+            IDataReaderEntityBuilder<T> entytyList = this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate(cacheKey, () =>
             {
                 var cacheResult = new IDataReaderEntityBuilder<T>(this.Context, dr,
                     columns.Select(it=>it.Item1).ToList()).CreateBuilder(typeof(T));
@@ -680,7 +732,7 @@ namespace SqlSugar
             var entityInfo = this.Context.EntityMaintenance.GetEntityInfo<T>();
             var columns = UtilMethods.GetColumnInfo(dr);
             var cacheKey = "ForEachDataReader" + typeof(T).GetHashCode() + string.Join(",", columns.Select(it => it.Item1 + it.Item2.Name + "_"));
-            IDataReaderEntityBuilder<T> entytyList = this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate("cacheKey", () =>
+            IDataReaderEntityBuilder<T> entytyList = this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate(cacheKey, () =>
             {
                 var cacheResult = new IDataReaderEntityBuilder<T>(this.Context, dr,
                     columns.Select(it => it.Item1).ToList()).CreateBuilder(typeof(T));
@@ -695,6 +747,69 @@ namespace SqlSugar
                     action(order);
                 }
             }
+            if (this.Context.CurrentConnectionConfig.IsAutoCloseConnection)
+            {
+                this.Context.Ado.Close();
+            }
+        }
+        public async IAsyncEnumerable<T> GetAsyncEnumerable()
+        {
+            var queryable = this.Clone();
+            var sql = queryable.ToSql();
+            var dr = await Context.Ado.GetDataReaderAsync(sql.Key, sql.Value).ConfigureAwait(false);
+            var entityInfo = this.Context.EntityMaintenance.GetEntityInfo<T>();
+            var columns = UtilMethods.GetColumnInfo(dr);
+            var cacheKey = "GetAsyncEnumerable" + typeof(T).GetHashCode() + string.Join(",", columns.Select(it => it.Item1 + it.Item2.Name + "_"));
+            IDataReaderEntityBuilder<T> entytyList = this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate(cacheKey, () =>
+            {
+                var cacheResult = new IDataReaderEntityBuilder<T>(this.Context, dr,
+                    columns.Select(it => it.Item1).ToList()).CreateBuilder(typeof(T));
+                return cacheResult;
+            });
+
+
+            using (dr)
+            {
+                while (dr.Read())
+                {
+
+                    var order = entytyList.Build(dr);
+                    yield return order;
+                }
+            }
+            if (this.Context.CurrentConnectionConfig.IsAutoCloseConnection)
+            {
+                this.Context.Ado.Close();
+            }
+
+        } 
+        public IEnumerable<T> GetEnumerable()
+        {
+            var queryable = this.Clone();
+            var sql = queryable.ToSql();
+            var dr = this.Context.Ado.GetDataReader(sql.Key, sql.Value);
+            var entityInfo = this.Context.EntityMaintenance.GetEntityInfo<T>();
+            var columns = UtilMethods.GetColumnInfo(dr);
+            var cacheKey = "GetEnumerable" + typeof(T).GetHashCode() + string.Join(",", columns.Select(it => it.Item1 + it.Item2.Name + "_"));
+            IDataReaderEntityBuilder<T> entytyList = this.Context.Utilities.GetReflectionInoCacheInstance().GetOrCreate(cacheKey, () =>
+            {
+                var cacheResult = new IDataReaderEntityBuilder<T>(this.Context, dr,
+                    columns.Select(it => it.Item1).ToList()).CreateBuilder(typeof(T));
+                return cacheResult;
+            });
+
+
+            using (dr)
+            {
+                while (dr.Read())
+                {
+
+                    var order = entytyList.Build(dr);
+                    yield return order;
+                }
+            }
+
+
             if (this.Context.CurrentConnectionConfig.IsAutoCloseConnection)
             {
                 this.Context.Ado.Close();
@@ -849,6 +964,11 @@ namespace SqlSugar
         }
         public virtual string ToSqlString()
         {
+            if (this.EntityInfo?.Type?.IsInterface==true)
+            {
+               this.QueryBuilder.SelectValue = " * ";
+               this.AsType(this.EntityInfo.Type);
+            }
             var sqlObj = this.Clone().ToSql();
             var result = sqlObj.Key;
             if (result == null) return null;

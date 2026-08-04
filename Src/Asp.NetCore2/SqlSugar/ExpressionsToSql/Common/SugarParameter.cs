@@ -139,6 +139,14 @@ namespace SqlSugar
             {
                 this.DbType = System.Data.DbType.Object;
             }
+            else if (type?.Namespace == "Kdbndp.LegacyPostgis")
+            {
+                this.DbType = System.Data.DbType.Object;
+            }
+            else if (type?.Namespace == "NetTopologySuite.Geometries")
+            {
+                this.DbType = System.Data.DbType.Object;
+            }
             else if (type!=null&&type.IsEnum())
             {
                 this.DbType = System.Data.DbType.Int64;
@@ -206,6 +214,11 @@ namespace SqlSugar
         public override string ParameterName
         {
             get; set;
+        }
+
+        public override byte Scale
+        {
+            get;set;
         }
 
         public int _Size;

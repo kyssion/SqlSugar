@@ -130,6 +130,11 @@ namespace SqlSugar
         }
         public override string DateDiff(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return base.DateDiff(model);
+            }
+
             var parameter = (DateType)(Enum.Parse(typeof(DateType), model.Args[0].MemberValue.ObjToString()));
             var begin = model.Args[1].MemberName;
             var end = model.Args[2].MemberName;
@@ -177,6 +182,10 @@ namespace SqlSugar
         }
         public override string DateValue(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return new SqlServerMethod().DateValue(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             var format = "dd";
@@ -222,6 +231,10 @@ namespace SqlSugar
 
         public override string Contains(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model)) 
+            {
+                return base.Contains(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             return string.Format(" ({0} like pg_catalog.concat('%',{1},'%')) ", parameter.MemberName, parameter2.MemberName);
@@ -229,6 +242,10 @@ namespace SqlSugar
 
         public override string StartsWith(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return base.StartsWith(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             return string.Format(" ({0} like pg_catalog.concat({1},'%')) ", parameter.MemberName, parameter2.MemberName);
@@ -236,6 +253,10 @@ namespace SqlSugar
 
         public override string EndsWith(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return base.EndsWith(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             return string.Format(" ({0} like pg_catalog.concat('%',{1}))", parameter.MemberName, parameter2.MemberName);
@@ -243,6 +264,10 @@ namespace SqlSugar
 
         public override string DateIsSameDay(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model)) 
+            {
+                return new SqlServerMethod().DateIsSameDay(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             return string.Format(" ( to_char({0},'yyyy-MM-dd')=to_char({1},'yyyy-MM-dd') ) ", parameter.MemberName, parameter2.MemberName); ;
@@ -256,6 +281,10 @@ namespace SqlSugar
 
         public override string DateIsSameByType(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return new SqlServerMethod().DateIsSameByType(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             var parameter3 = model.Args[2];
@@ -296,10 +325,35 @@ namespace SqlSugar
         public override string ToDate(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
+            if (IsSqlServerModel(model))
+            {
+                return string.Format(" CAST({0} AS dateTime)", parameter.MemberName);
+            }
             return string.Format(" CAST({0} AS timestamp)", parameter.MemberName);
+        }
+        public override string GetForXmlPath()
+        {
+            if (IsSqlServerModel())
+            {
+                return new SqlServerMethod().GetForXmlPath();
+            }
+            return base.GetForXmlPath();
+        }
+         
+        public override string GetStringJoinSelector(string result, string separator)
+        {
+            if (IsSqlServerModel())
+            {
+                return new SqlServerMethod().GetStringJoinSelector(result,separator);
+            }
+            return base.GetStringJoinSelector(result, separator);
         }
         public override string DateAddByType(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return base.DateAddByType(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             var parameter3 = model.Args[2];
@@ -312,6 +366,10 @@ namespace SqlSugar
 
         public override string DateAddDay(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model)) 
+            {
+                return base.DateAddDay(model);
+            }
             var parameter = model.Args[0];
             var parameter2 = model.Args[1];
             return string.Format(" ({0} + ({1}||'day')::INTERVAL) ", parameter.MemberName, parameter2.MemberName);
@@ -319,12 +377,20 @@ namespace SqlSugar
 
         public override string ToInt32(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return  new SqlServerMethod().ToInt32(model);
+            }
             var parameter = model.Args[0];
             return string.Format(" CAST({0} AS INT4)", parameter.MemberName);
         }
 
         public override string ToInt64(MethodCallExpressionModel model)
         {
+            if (IsSqlServerModel(model))
+            {
+                return new SqlServerMethod().ToInt64(model);
+            }
             var parameter = model.Args[0];
             return string.Format(" CAST({0} AS INT8)", parameter.MemberName);
         }
@@ -332,6 +398,10 @@ namespace SqlSugar
         public override string ToString(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];
+            if (IsSqlServerModel(model)) 
+            {
+                return base.ToString(model);
+            }
             return string.Format(" CAST({0} AS VARCHAR)", parameter.MemberName);
         }
 
@@ -367,7 +437,11 @@ namespace SqlSugar
         public override string MergeString(params string[] strings)
         {
             var key = Guid.NewGuid() + "";
-            return " concat(" + string.Join(",", strings.Select(it => it?.Replace("+", key))).Replace("+", "").Replace(key, "+") + ") ";
+            if (strings.Length == 1) 
+            {
+                return " pg_catalog.concat(" + string.Join(",", strings.Select(it => it?.Replace("+", key))).Replace("+", "").Replace(key, "+") + ",null) ";
+            }
+            return " pg_catalog.concat(" + string.Join(",", strings.Select(it => it?.Replace("+", key))).Replace("+", "").Replace(key, "+") + ") ";
         }
         public override string IsNull(MethodCallExpressionModel model)
         {
@@ -459,6 +533,10 @@ namespace SqlSugar
                 return $"{model.Args[0].MemberName}::jsonb @> '[\"{model.Args[1].MemberValue}\"]'::jsonb ";
             }
         }
+        public override string Format(MethodCallExpressionModel model)
+        {
+            return base.Format(model).Replace("concat(", "pg_catalog.concat(");
+        }
         public override string JsonListObjectAny(MethodCallExpressionModel model)
         {
             if (UtilMethods.IsNumber(model.Args[2].MemberValue.GetType().Name))
@@ -493,6 +571,15 @@ namespace SqlSugar
                 formatString = formatString.Replace("HH", "hh24");
             }
             return $" to_char({dateValue},'{formatString}') ";
+        }
+
+        private static bool IsSqlServerModel(MethodCallExpressionModel model)
+        {
+            return model?.Conext?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
+        } 
+        private bool IsSqlServerModel()
+        {
+            return this.sqlSugarClient?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
         }
     }
 }

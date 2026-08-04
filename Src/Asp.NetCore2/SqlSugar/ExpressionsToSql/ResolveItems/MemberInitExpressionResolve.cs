@@ -55,11 +55,10 @@ namespace SqlSugar
                 var item = memberAssignment.Expression;
                 item = ExpressionTool.RemoveConvert(item);
                 //Column IsJson Handler
-                if (memberAssignment.Member.CustomAttributes != null)
-                {
-                    var customAttribute = memberAssignment.Member.GetCustomAttribute<SugarColumn>();
-
-                    if (customAttribute?.IsJson ?? false)
+                if (entityMaintenance!=null)
+                { 
+                    EntityColumnInfo columnInfo = entityMaintenance.GetEntityInfo(type).Columns.FirstOrDefault(it => it.PropertyName == memberAssignment.Member.Name);
+                    if (columnInfo?.IsJson ?? false)
                     {
                         var paramterValue = ExpressionTool.DynamicInvoke(item);
                         var parameterName = AppendParameter(new SerializeService().SerializeObject(paramterValue));
@@ -70,6 +69,15 @@ namespace SqlSugar
                         }
                         this.Context.Result.Append(base.Context.GetEqString(memberName, parameterName));
 
+                        continue;
+                    }
+                    else if (UtilMethods.IsParameterConverter(columnInfo))
+                    { 
+                        var value = ExpressionTool.DynamicInvoke(item);
+                        var p=UtilMethods.GetParameterConverter(this.Context.ParameterIndex,this.Context.SugarContext.Context, value, memberAssignment.Expression, columnInfo);
+                        this.Context.Result.Append(base.Context.GetEqString(memberName, p.ParameterName));
+                        this.Context.ParameterIndex++;
+                        this.Context.Parameters.Add(p);
                         continue;
                     }
                 }
@@ -149,6 +157,10 @@ namespace SqlSugar
                     item = (item as UnaryExpression).Operand;
                     parameter.Context.Result.Append(base.Context.GetEqString(memberName, GetNewExpressionValue(item)));
                 }
+                else if (UtilMethods.GetUnderType(item.Type) == UtilConstants.BoolType&&item is MemberExpression m&&m?.Expression is MemberExpression m2&&m2?.Expression is MemberExpression&&ExpressionTool.NoParameterOrSqlfunc(item))
+                { 
+                    parameter.Context.Result.Append(base.Context.GetEqString(memberName,AppendParameter(ExpressionTool.DynamicInvoke(item))));
+                }
                 else if (IsConst(item))
                 {
                     base.Expression = ExpressionTool.RemoveConvertThanOne(item);
@@ -156,6 +168,14 @@ namespace SqlSugar
                     string parameterName = this.Context.SqlParameterKeyWord + ExpressionConst.Const + this.Context.ParameterIndex;
                     parameter.Context.Result.Append(base.Context.GetEqString(memberName, parameterName));
                     var addItem = new SugarParameter(parameterName, parameter.CommonTempData);
+                    if (addItem.Value == null&&item.Type?.Name== "Nullable`1") 
+                    {
+                        var genericType = item.Type?.GenericTypeArguments?.FirstOrDefault();
+                        if (genericType != null) 
+                        {
+                            addItem.DbType = new SugarParameter(parameterName, UtilMethods.GetDefaultValue(genericType)).DbType;
+                        }
+                    }
                     ConvertParameterTypeByType(item, addItem);
 
                     this.Context.Parameters.Add(addItem);
@@ -185,12 +205,31 @@ namespace SqlSugar
                         base.Context.Result.CurrentParameter = null;
                     }
                 }
+                else if (item is BinaryExpression&&ExpressionTool.NoParameterOrSqlfunc(item))
+                {
+                    var result = LambdaExpression.Lambda(item).Compile().DynamicInvoke();
+                    parameter.Context.Result.Append(base.Context.GetEqString(memberName, AppendParameter(result)));
+                }
                 else if (item is BinaryExpression)
                 {
                     var result = GetNewExpressionValue(item);
                     if (result.HasValue())
                     {
                         result = result.Replace(",", UtilConstants.ReplaceCommaKey);
+                    }
+                    if (item.Type == UtilConstants.BoolType)
+                    {
+                        var trueValue = AppendParameter(true);
+                        var falseValue = AppendParameter(false);
+                        result = new DefaultDbMethod().IIF(new MethodCallExpressionModel()
+                        {
+                            Args = new List<MethodCallExpressionArgs>()
+                         {
+                             new MethodCallExpressionArgs(){ MemberValue=result,MemberName=result },
+                             new MethodCallExpressionArgs(){ MemberValue=trueValue,MemberName=trueValue },
+                             new MethodCallExpressionArgs(){ MemberValue=falseValue,MemberName=falseValue }
+                         }
+                        });
                     }
                     this.Context.Result.Append(base.Context.GetEqString(memberName, result));
                 }
@@ -308,12 +347,18 @@ namespace SqlSugar
             {
                 base.Expression = item;
                 base.Start();
-                parameter.Context.Result.Append(base.Context.GetEqString(memberName, parameter.CommonTempData.ObjToString().Replace(",", UtilConstants.ReplaceCommaKey)));
+                var asValue = parameter.CommonTempData.ObjToString().Replace(",", UtilConstants.ReplaceCommaKey);
+                parameter.Context.Result.Append(base.Context.GetEqString(memberName, asValue));
+                if (asValue == "sysdate" && this.Context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings?.IsAutoToUpper == false)
+                {
+                    parameter.Context.Result.Replace(" = \"sysdate\" ", " = sysdate ");
+                }
             }
         }
 
         private void Select(MemberInitExpression expression, ExpressionParameter parameter, bool isSingle)
         {
+            var isAnyParameterExpression = false;
             foreach (MemberBinding binding in expression.Bindings)
             {
                 if (binding.BindingType != MemberBindingType.Assignment)
@@ -326,7 +371,7 @@ namespace SqlSugar
                 {
                     continue;
                 }
-                var item = memberAssignment.Expression;
+                var item =ExpressionTool.RemoveConvert(memberAssignment.Expression);
                 if (item.Type.IsClass()&& item is MemberExpression &&(item as MemberExpression).Expression is ParameterExpression) 
                 {
                     var rootType = ((item as MemberExpression).Expression as ParameterExpression).Type;
@@ -348,7 +393,15 @@ namespace SqlSugar
                         item = (item as UnaryExpression).Operand;
                     }
                 }
+                if(item is ParameterExpression) 
+                {
+                    isAnyParameterExpression = true;
+                }
                 ResolveNewExpressions(parameter, item, memberName);
+            }
+            if (isAnyParameterExpression && this.Context?.SugarContext?.QueryBuilder is QueryBuilder builder) 
+            {
+                builder.IsAnyParameterExpression = true;
             }
         }
 

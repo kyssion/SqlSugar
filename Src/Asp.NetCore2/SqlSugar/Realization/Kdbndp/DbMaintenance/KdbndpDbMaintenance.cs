@@ -36,7 +36,7 @@ namespace SqlSugar
                                 then true else false end as IsNullable
                                  from (select * from sys_tables where  UPPER(tablename) = UPPER('{{0}}') and  lower(schemaname)='{GetSchema()}') ptables inner join sys_class pclass
                                 on ptables.tablename = pclass.relname inner join (SELECT *
-                                FROM information_schema.columns
+                                FROM information_schema.columns where UPPER(table_schema)=UPPER('{GetSchema()}')
                                 ) pcolumn on pcolumn.table_name = ptables.tablename
                                 left join (
 	                                select  sys_class.relname,sys_attribute.attname as colname from 
@@ -54,7 +54,7 @@ namespace SqlSugar
                 {
                     sql = sql.Replace("sys_", "pg_");
                 }
-                else if (IsSqlServerModel()) 
+                else if (IsSqlServerModel())
                 {
 
                     sql = sql.Replace("sys_", "pg_");
@@ -66,6 +66,12 @@ namespace SqlSugar
                     sql = sql.Replace("case when pkey.colname = pcolumn.column_name", "case when pkey.colname::text = pcolumn.column_name::text");
                     sql = sql.Replace("pcolumn on pcolumn.table_name = ptables.tablename", "pcolumn on pcolumn.table_name::text = ptables.tablename::text ");
                     sql = sql.Replace("pkey on pcolumn.table_name = pkey.relname", "pkey on pcolumn.table_name::text = pkey.relname::text ");
+                }
+                else if (IsMySql()) 
+                {
+                    sql = sql.Replace("UPPER(", "pg_catalog.upper(",StringComparison.OrdinalIgnoreCase);
+                    sql = sql.Replace("lower(", "pg_catalog.lower(", StringComparison.OrdinalIgnoreCase);
+                    sql = sql.Replace("pcolumn.udt_name", "pcolumn.data_type");
                 }
                 return sql;
             }
@@ -80,26 +86,26 @@ namespace SqlSugar
                         cast(obj_description(relfilenode,'pg_class') as varchar) as Description from pg_class c 
                         where  relkind = 'r' and  c.oid >= 16384 and c.relnamespace != 99 and c.relname not like '%pl_profiler_saved%' order by relname";
                 }
-                return @"select cast(relname as varchar) as Name,
+                var result= @"select cast(relname as varchar) as Name,
                         cast(obj_description(relfilenode,'pg_class') as varchar) as Description from sys_class c 
                         where  relkind = 'r' and  c.oid >= 16384 and c.relnamespace != 99 and c.relname not like '%pl_profiler_saved%' order by relname";
+
+                if (IsSqlServerModel()) 
+                {
+                    result = result.Replace(" as varchar)", " as varchar(max))");
+                }
+                return result;
             }
         }
         protected override string GetViewInfoListSql
         {
             get
             {
-                if (IsPgModel())
+                if (IsSqlServerModel()) 
                 {
-                    return @"select cast(relname as varchar) as Name,cast(Description as varchar) from pg_description
-                         join pg_class on pg_description.objoid = pg_class.oid
-                         where objsubid = 0 and relname in (SELECT viewname from pg_views  
-                         WHERE schemaname ='"+GetSchema()+"')";
+                    return "select table_name as name from information_schema.tables where table_type='VIEW'  and lower(table_schema)  ='" + GetSchema() + "' ";
                 }
-                return @"select cast(relname as varchar) as Name,cast(Description as varchar) from sys_description
-                         join sys_class on sys_description.objoid = sys_class.oid
-                         where objsubid = 0 and relname in (SELECT viewname from sys_views  
-                         WHERE schemaname ='"+GetSchema()+"')";
+                return @"select  table_name as name  from information_schema.views where lower(table_schema)  ='" + GetSchema() + "' ";
             }
         }
         #endregion
@@ -123,13 +129,17 @@ namespace SqlSugar
         {
             get
             {
+                if (IsSqlServerModel()) 
+                {
+                    return "ALTER TABLE {0} ADD  {1} {2}{3} {4} {5} {6}";
+                }
                 return "ALTER TABLE {0} ADD COLUMN {1} {2}{3} {4} {5} {6}";
             }
         }
         protected override string AlterColumnToTableSql
         {
             get
-            {
+            { 
                 return "alter table {0} ALTER COLUMN {1} {2}{3} {4} {5} {6}";
             }
         }
@@ -221,6 +231,10 @@ namespace SqlSugar
         {
             get
             {
+                if (IsSqlServerModel()) 
+                {
+                    return "ALTER TABLE {0} ALTER {1} SET DEFAULT {2}";
+                }
                 return "ALTER TABLE {0} ALTER COLUMN {1} SET DEFAULT {2}";
             }
         }
@@ -232,6 +246,11 @@ namespace SqlSugar
                 if (IsPgModel())
                 {
                     sql = sql.Replace("sys_", "pg_");
+                }
+                if (IsSqlServerModel() || IsMySql()) 
+                {
+                    sql = sql.Replace("UPPER(", "pg_catalog.upper(", StringComparison.OrdinalIgnoreCase);
+                    sql = sql.Replace("lower(", "pg_catalog.lower(", StringComparison.OrdinalIgnoreCase);
                 }
                 return sql;
             }
@@ -340,6 +359,11 @@ WHERE tgrelid = '" + tableName + "'::regclass");
             {
                 sql = sql.Replace("sys_", "pg_");
             }
+            if (IsSqlServerModel() || IsMySql()) 
+            {
+                sql = sql.Replace("UPPER(", "pg_catalog.upper(", StringComparison.OrdinalIgnoreCase);
+                sql = sql.Replace("lower(", "pg_catalog.lower(", StringComparison.OrdinalIgnoreCase);
+            }
             return this.Context.Ado.SqlQuery<string>(sql);
         }
         public override List<string> GetProcList(string dbName)
@@ -348,6 +372,11 @@ WHERE tgrelid = '" + tableName + "'::regclass");
             if (IsPgModel())
             {
                 sql = sql.Replace("sys_", "pg_");
+            }
+            if (IsSqlServerModel() || IsMySql())
+            {
+                sql = sql.Replace("UPPER(", "pg_catalog.upper(", StringComparison.OrdinalIgnoreCase);
+                sql = sql.Replace("lower(", "pg_catalog.lower(", StringComparison.OrdinalIgnoreCase);
             }
             return this.Context.Ado.SqlQuery<string>(sql);
         }
@@ -379,6 +408,15 @@ WHERE tgrelid = '" + tableName + "'::regclass");
         }
         public override bool UpdateColumn(string tableName, DbColumnInfo columnInfo)
         {
+            if (IsSqlServerModel())
+            {
+                if (columnInfo.DataType.EqualCase("uuid"))
+                {
+                    columnInfo.DataType = "uniqueidentifier";
+                    columnInfo.Length = 0;
+                    columnInfo.Scale = 0;
+                }
+            }
 
             ConvertCreateColumnInfo(columnInfo);
             tableName = this.SqlBuilder.GetTranslationTableName(tableName);
@@ -419,10 +457,11 @@ WHERE tgrelid = '" + tableName + "'::regclass");
         public override bool IsAnyTable(string tableName, bool isCache = true)
         {
             var sql = $"select count(*) from information_schema.tables where UPPER(table_schema)=UPPER('{GetSchema()}') and UPPER(table_type)=UPPER('BASE TABLE') and UPPER(table_name)=UPPER('{tableName.ToUpper(IsUpper)}')";
-            if (IsSqlServerModel()) 
+            if (IsSqlServerModel()||IsMySql()) 
             {
-                sql = $"select count(*) from information_schema.tables where  pg_catalog.UPPER(table_name)=pg_catalog.UPPER('{tableName.ToUpper(IsUpper)}')";
+                sql = $"select count(*) from information_schema.tables where  UPPER(table_schema)=UPPER('{GetSchema()}') and  pg_catalog.UPPER(table_name)=pg_catalog.UPPER('{tableName.ToUpper(IsUpper)}')";
             }
+
             return this.Context.Ado.GetInt(sql)>0;
         }
 
@@ -495,6 +534,19 @@ WHERE tgrelid = '" + tableName + "'::regclass");
             }
             return true;
         }
+        public override bool AddColumn(string tableName, DbColumnInfo columnInfo)
+        {
+            if (IsSqlServerModel()) 
+            {
+                if (columnInfo.DataType.EqualCase("uuid")) 
+                {
+                    columnInfo.DataType = "uniqueidentifier";
+                    columnInfo.Length = 0;
+                    columnInfo.Scale = 0;
+                }
+            }
+            return base.AddColumn(tableName, columnInfo);
+        }
         public override bool RenameTable(string oldTableName, string newTableName)
         {
             return base.RenameTable(this.SqlBuilder.GetTranslationTableName(oldTableName), this.SqlBuilder.GetTranslationTableName(newTableName));
@@ -507,13 +559,13 @@ WHERE tgrelid = '" + tableName + "'::regclass");
                 {
 
                     ConvertCreateColumnInfo(item);
-                    if (item.DbColumnName.Equals("GUID", StringComparison.CurrentCultureIgnoreCase) && item.Length == 0)
-                    {
-                        if (item.DataType?.ToLower() != "uuid")
-                        {
-                            item.Length = 10;
-                        }
-                    }
+                    //if (item.DbColumnName.Equals("GUID", StringComparison.CurrentCultureIgnoreCase) && item.Length == 0)
+                    //{
+                    //    if (item.DataType?.ToLower() != "uuid")
+                    //    {
+                    //        item.Length = 10;
+                    //    }
+                    //}
                 }
             }
             string sql = GetCreateTableSql(tableName, columns);
@@ -563,7 +615,30 @@ WHERE tgrelid = '" + tableName + "'::regclass");
                         dataSize = "int8";
                     }
                     string length = dataType.Substring(dataType.Length - 1);
+                    if (length == "t") 
+                    {
+                        if (dataType?.ToLower() == "int") 
+                        {
+                            length = "4";
+                        }
+                        if (dataType?.ToLower() == "bigint")
+                        {
+                            length = "8";
+                        }
+                    }
                     string identityDataType = "serial" + length;
+                    if (IsSqlServerModel()&&dataType=="int") 
+                    {
+                        identityDataType = $" serial4 ";
+                    }
+                    if (IsSqlServerModel() && dataType == "long")
+                    {
+                        identityDataType = $" serial8 ";
+                    }
+                    if (IsSqlServerModel() && dataType == "bigint")
+                    {
+                        identityDataType = $" serial8 ";
+                    }
                     addItem = addItem.Replace(dataType, identityDataType);
                 }
                 columnArray.Add(addItem);
@@ -649,7 +724,7 @@ WHERE tgrelid = '" + tableName + "'::regclass");
                 }
             }
         }
-        private static void ConvertCreateColumnInfo(DbColumnInfo x)
+        private  void ConvertCreateColumnInfo(DbColumnInfo x)
         {
             string[] array = new string[] { "int4", "text", "int2", "int8", "date", "bit", "text", "timestamp" };
 
@@ -657,6 +732,21 @@ WHERE tgrelid = '" + tableName + "'::regclass");
             {
                 x.Length = 0;
                 x.DecimalDigits = 0;
+            }
+
+            if (IsSqlServerModel())
+            {
+                if (x.DataType.EqualCase("int8"))
+                {
+                    x.DataType = "bigint";
+                    x.Length = 0;
+                    x.Scale = 0;
+                }
+            }
+            if (IsSqlServerModel() && x.DataType == "bytea")
+            {
+                x.Length = 0;
+                x.DataType = "varbinary(max)";
             }
         }
         private bool IsPgModel()
@@ -666,6 +756,10 @@ WHERE tgrelid = '" + tableName + "'::regclass");
         private bool IsSqlServerModel()
         {
             return this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.SqlServer;
+        }
+        private bool IsMySql()
+        {
+            return this.Context.CurrentConnectionConfig?.MoreSettings?.DatabaseModel == DbType.MySql;
         }
         #endregion
     }

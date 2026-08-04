@@ -9,6 +9,8 @@ namespace SqlSugar
 {
     public interface ITenant
     {
+        SqlSugarClient CopyNew();
+        string[] GetCurrentConfigIds();
         void BeginTran();
         void BeginTran(IsolationLevel iso);
         void CommitTran();

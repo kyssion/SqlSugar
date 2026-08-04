@@ -17,7 +17,227 @@ using System.Text.RegularExpressions;
 namespace SqlSugar
 {
     public class UtilMethods
-    {
+    { 
+        public static DbType? GetDataBaseModel(ISqlSugarClient client)
+        {
+            return client?.CurrentConnectionConfig?.MoreSettings?.DatabaseModel;
+        }
+        public static bool IsArrayOrList(Type propertyType) 
+        { 
+            if (propertyType==null||propertyType == typeof(string))
+                return false; 
+            var isList = propertyType.FullName.IsCollectionsList();
+            var isArray = propertyType.IsArray;
+            return isList || isArray;
+        }
+        public static object ConvertToArray(string input, Type targetType)
+        {
+            // 获取元素类型和集合类型
+            Type elementType;
+            bool isArray = targetType.IsArray;
+            bool isList = targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(List<>);
+
+            if (!isArray && !isList)
+                throw new ArgumentException("目标类型必须是数组或List类型");
+
+            elementType = isArray ? targetType.GetElementType() : targetType.GetGenericArguments()[0];
+
+            // 处理空输入
+            if (string.IsNullOrEmpty(input))
+            {
+                if (isArray)
+                    return Array.CreateInstance(elementType, 0);
+                else
+                    return Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType));
+            }
+
+            // 解析输入字符串
+            var elements = input.Trim('[', ']').Split(',');
+
+            if (isArray)
+            {
+                // 处理数组
+                Array array = Array.CreateInstance(elementType, elements.Length);
+                for (int i = 0; i < elements.Length; i++)
+                {
+                    string element = elements[i]?.Trim()?.TrimStart('"')?.TrimEnd('"');
+                    array.SetValue(UtilMethods.ChangeType2(element, elementType), i);
+                }
+                return array;
+            }
+            else
+            {
+                // 处理List
+                var list = (IList)Activator.CreateInstance(typeof(List<>).MakeGenericType(elementType));
+                for (int i = 0; i < elements.Length; i++)
+                {
+                    string element = elements[i]?.Trim()?.TrimStart('"')?.TrimEnd('"');
+                    list.Add(UtilMethods.ChangeType2(element, elementType));
+                }
+                return list;
+            }
+        }
+        internal static DbType? GetDatabaseType(ExpressionContext context)
+        {
+            return context?.SugarContext?.Context?.CurrentConnectionConfig?.DbType;
+        }
+        internal static void SetDefaultValueForBoolean(EntityColumnInfo item, Type propertyType)
+        {
+            if (propertyType == UtilConstants.BoolType && item.DefaultValue != null && item.DefaultValue.EqualCase("true"))
+            {
+                item.DefaultValue = "1";
+            }
+            else if (propertyType == UtilConstants.BoolType && item.DefaultValue != null && item.DefaultValue.EqualCase("false"))
+            {
+                item.DefaultValue = "0";
+            }
+        }
+
+        public static void UpdateQueryBuilderByClone<TResult>(QueryBuilder queryBuilder,ISugarQueryable<TResult> clone)
+        {
+            queryBuilder.MappingKeys = clone.QueryBuilder.MappingKeys;
+        }
+        public static bool IsKeyValuePairType(Type type)
+        {
+            return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(KeyValuePair<,>);
+        }
+        public static DataTable ConvertDateTimeOffsetToDateTime(DataTable table)
+        {
+            if (!table.Columns.Cast<DataColumn>().Any(it => it.DataType == typeof(DateTimeOffset))) 
+            {
+                return table;
+            }
+            DataTable newTable = table.Clone();
+            newTable.TableName = table.TableName;
+            // 替换所有 DateTimeOffset 列为 DateTime
+            foreach (DataColumn column in newTable.Columns)
+            {
+                if (column.DataType == typeof(DateTimeOffset))
+                {
+                    column.DataType = typeof(DateTime); // 会报错，不能直接改
+                }
+            }
+
+            // 需要重新构建新表结构
+            DataTable finalTable = new DataTable();
+            finalTable.TableName = table.TableName;
+            foreach (DataColumn column in table.Columns)
+            {
+                Type newType = column.DataType == typeof(DateTimeOffset) ? typeof(DateTime) : column.DataType;
+                finalTable.Columns.Add(column.ColumnName, newType);
+            }
+
+            // 拷贝并转换数据
+            foreach (DataRow row in table.Rows)
+            {
+                DataRow newRow = finalTable.NewRow();
+                foreach (DataColumn column in table.Columns)
+                {
+                    var value = row[column];
+                    if (value is DateTimeOffset dto)
+                        newRow[column.ColumnName] = dto.DateTime;
+                    else
+                        newRow[column.ColumnName] = value;
+                }
+                finalTable.Rows.Add(newRow);
+            }
+
+            return finalTable;
+        }
+        public static string EscapeLikeValue(ISqlSugarClient db, string value,params char[] wildcards) 
+        {
+            if (wildcards != null)
+            {
+                foreach (var item in wildcards)
+                {
+                    value = EscapeLikeValue(db,value,item);
+                }
+            }
+            return value;
+        }
+        public static string EscapeLikeValue(ISqlSugarClient db, string value, char wildcard='%')
+        {
+            var dbType = db.CurrentConnectionConfig.DbType;
+            if (db.CurrentConnectionConfig?.MoreSettings?.DatabaseModel != null) 
+            {
+                dbType = db.CurrentConnectionConfig.MoreSettings.DatabaseModel.Value;
+            }
+            if (string.IsNullOrEmpty(value))
+                return value;
+             
+            string wildcardStr = wildcard.ToString();
+
+            switch (dbType)
+            {
+                // 支持标准 SQL LIKE 转义，通常使用中括号 [] 或反斜杠 \ 进行转义
+                case DbType.SqlServer:
+                case DbType.Access:
+                case DbType.Odbc:
+                case DbType.TDSQLForPGODBC:
+
+                    if (wildcard == ']' || wildcard == '[') 
+                    {
+                        var keyLeft2 = "[[]";
+                        var keyRight2 = "[]]";
+                        var leftGuid2 = Guid.NewGuid().ToString();
+                        var rightGuid2 = Guid.NewGuid().ToString();
+                        value = value.Replace(keyLeft2, leftGuid2)
+                                     .Replace(keyRight2, rightGuid2);
+
+                        value = value.Replace(wildcard + "", $"[{wildcard}]");
+                        value = value.Replace(leftGuid2, keyLeft2)
+                                   .Replace(rightGuid2,keyRight2);
+                        break;
+                    }
+                    // SQL Server 使用中括号转义 %, _ 等
+                    var keyLeft = "[[]";
+                    var keyRight = "[]]";
+                    var leftGuid = Guid.NewGuid().ToString();
+                    var rightGuid = Guid.NewGuid().ToString();
+                    value = value.Replace("[", leftGuid)
+                                 .Replace("]", rightGuid);
+
+                    value = value.Replace(leftGuid, keyLeft)
+                              .Replace(rightGuid, keyRight);
+                    value =value
+                                 .Replace(wildcardStr, $"[{wildcard}]");
+                    break;
+
+                // PostgreSQL 风格数据库，使用反斜杠进行 LIKE 转义
+                case DbType.PostgreSQL:
+                case DbType.OpenGauss:
+                case DbType.TDSQL:
+                case DbType.GaussDB:
+                case DbType.GaussDBNative:
+                // MySQL 和兼容库，使用反斜杠进行转义
+                case DbType.MySql:
+                case DbType.MySqlConnector:
+                case DbType.Tidb:
+                case DbType.PolarDB:
+                case DbType.OceanBase:
+                case DbType.Oracle:
+                case DbType.OceanBaseForOracle:
+                case DbType.HG:
+                case DbType.Dm:
+                case DbType.GBase:
+                case DbType.DB2:
+                case DbType.HANA:
+                case DbType.GoldenDB:
+                case DbType.Sqlite:
+                case DbType.DuckDB:
+                case DbType.QuestDB:
+                case DbType.Doris:
+                case DbType.Xugu:
+                case DbType.Vastbase:
+                default:
+                    value = value 
+                                 .Replace(wildcardStr, "\\" + wildcard);
+                    break;
+            }
+
+            return value;
+        }
+
 
         public static List<SugarParameter> CopySugarParameters(List<SugarParameter> pars)
         {
@@ -191,6 +411,14 @@ namespace SqlSugar
             var ParameterConverter = type.GetMethod("ParameterConverter").MakeGenericMethod(columnInfo.PropertyInfo.PropertyType);
             var obj = Activator.CreateInstance(type);
             var p = ParameterConverter.Invoke(obj, new object[] { value, 100 + index }) as SugarParameter;
+            return p;
+        }
+        internal static object QueryConverter(int index, ISqlSugarClient db, IDataReader dataReader , EntityInfo entity, EntityColumnInfo columnInfo)
+        {
+            var type = columnInfo.SqlParameterDbType as Type;
+            var ParameterConverter = type.GetMethod("QueryConverter").MakeGenericMethod(columnInfo.PropertyInfo.PropertyType);
+            var obj = Activator.CreateInstance(type);
+            var p = ParameterConverter.Invoke(obj, new object[] { dataReader , index });
             return p;
         }
         internal static bool IsErrorParameterName(ConnectionConfig connectionConfig,DbColumnInfo columnInfo)
@@ -591,11 +819,32 @@ namespace SqlSugar
             {
                 destinationType = UtilMethods.GetUnderType(destinationType);
                 var sourceType = value.GetType();
-                if (destinationType.Name == "DateOnly"&&sourceType==typeof(string)) 
+                if (destinationType.Name == "DateOnly" && sourceType == typeof(string))
                 {
                     var type = Type.GetType("System.DateOnly", true, true);
                     var method = type.GetMethods().FirstOrDefault(it => it.GetParameters().Length == 1 && it.Name == "FromDateTime");
-                    return method.Invoke(null, new object[] {Convert.ToDateTime(value)});
+                    return method.Invoke(null, new object[] { Convert.ToDateTime(value) });
+                }
+                else if (destinationType.FullName == "System.Ulid")
+                {
+                    var method = destinationType.GetMyMethod("Parse", 1);
+                    if (method != null)
+                    {
+                        var result = method.Invoke(null, new object[] { value });
+                        return result;
+                    }
+                }
+                else if (value is byte[] bytes&&bytes.Length==1&& destinationType == typeof(char)) 
+                {
+                    return (char)(bytes)[0];
+                }
+                else if (value is DateTime &&   destinationType == typeof(TimeSpan))
+                {
+                    value = Convert.ToDateTime(value).TimeOfDay;
+                }
+                else if (value is DateTime && destinationType.FullName == "System.TimeOnly")
+                {
+                    value = Convert.ToDateTime(value).TimeOfDay;
                 }
                 var destinationConverter = TypeDescriptor.GetConverter(destinationType);
                 if (destinationConverter != null && destinationConverter.CanConvertFrom(value.GetType()))
@@ -607,6 +856,10 @@ namespace SqlSugar
 
                 if (destinationType.IsEnum && value is int)
                     return Enum.ToObject(destinationType, (int)value);
+                if (destinationType.IsEnum && value is double)
+                    return Enum.ToObject(destinationType, Convert.ToInt32(value));
+                if (destinationType.IsEnum && value is decimal)
+                    return Enum.ToObject(destinationType, Convert.ToInt32(value));
 
                 if (destinationType.Name == "TimeOnly"&& sourceType.Name!= "TimeOnly") 
                 {
@@ -653,6 +906,10 @@ namespace SqlSugar
                    OnLogExecuted=it.AopEvents?.OnLogExecuted,
                    OnLogExecuting= it.AopEvents?.OnLogExecuting,
                    DataExecuted = it.AopEvents?.DataExecuted,
+                    CheckConnectionExecuted = it.AopEvents?.CheckConnectionExecuted,
+                    CheckConnectionExecuting = it.AopEvents?.CheckConnectionExecuting,
+                    OnGetDataReadered= it.AopEvents?.OnGetDataReadered,
+                    OnGetDataReadering = it.AopEvents?.OnGetDataReadering,
                 },
                 ConfigId = it.ConfigId,
                 ConfigureExternalServices =it.ConfigureExternalServices==null?null:new ConfigureExternalServices() { 
@@ -702,7 +959,13 @@ namespace SqlSugar
                     MaxParameterNameLength=it.MoreSettings.MaxParameterNameLength,
                     DisableQueryWhereColumnRemoveTrim=it.MoreSettings.DisableQueryWhereColumnRemoveTrim,
                     DatabaseModel=it.MoreSettings.DatabaseModel,
-                    EnableILike=it.MoreSettings.EnableILike
+                    EnableILike=it.MoreSettings.EnableILike,
+                    ClickHouseEnableFinal=it.MoreSettings.ClickHouseEnableFinal,
+                    PgSqlIsAutoToLowerSchema=it.MoreSettings.PgSqlIsAutoToLowerSchema,
+                    EnableJsonb=it.MoreSettings.EnableJsonb,
+                    PostgresIdentityStrategy = it.MoreSettings.PostgresIdentityStrategy,
+                    InnerTemp=it.MoreSettings?.InnerTemp,
+                    DmCodeFirstEnableCharInLength=it.MoreSettings.DmCodeFirstEnableCharInLength
 
                 },
                 SqlMiddle = it.SqlMiddle == null ? null : new SqlMiddle
@@ -941,6 +1204,10 @@ namespace SqlSugar
             if (value is string && type == typeof(Guid)) return new Guid(value as string);
             if (value is string && type == typeof(Version)) return new Version(value as string);
             if (!(value is IConvertible)) return value;
+            if(value is DateTime&&type.FullName== "System.DateOnly") 
+            {
+                value=UtilMethods.DateTimeToDateOnly(value);
+            }
             return Convert.ChangeType(value, type);
         }
 
@@ -1326,6 +1593,10 @@ namespace SqlSugar
                 CSharpTypeName = ctypename,
                 FieldValue = value
             };
+            if (ctypename == "DateOnly") 
+            {
+                return Convert.ToDateTime(value);
+            }
             if (item.FieldValue == string.Empty && item.CSharpTypeName.HasValue() && !item.CSharpTypeName.EqualCase("string")) 
             {
                 return null;
@@ -1378,6 +1649,14 @@ namespace SqlSugar
             else if (item.CSharpTypeName.EqualCase("long"))
             {
                 return Convert.ToInt64(item.FieldValue);
+            }
+            else if (item.CSharpTypeName.EqualCase("float"))
+            {
+                return Convert.ToSingle(item.FieldValue);
+            }
+            else if (item.CSharpTypeName.EqualCase("single"))
+            {
+                return Convert.ToSingle(item.FieldValue);
             }
             else if (item.CSharpTypeName.EqualCase("short"))
             {
@@ -1554,10 +1833,11 @@ namespace SqlSugar
         }
         public static string GetSqlString(ConnectionConfig connectionConfig,KeyValuePair<string, List<SugarParameter>> sqlObj)
         {
+            var guid = Guid.NewGuid()+"";
             var result = sqlObj.Key;
             if (sqlObj.Value != null)
             {
-                foreach (var item in sqlObj.Value.OrderByDescending(it => it.ParameterName.Length))
+                foreach (var item in UtilMethods.CopySugarParameters(sqlObj.Value).OrderByDescending(it => it.ParameterName.Length))
                 {
                     if (item.ParameterName.StartsWith(":")&&!result.Contains(item.ParameterName)) 
                     {
@@ -1631,15 +1911,15 @@ namespace SqlSugar
                     }
                     else if (connectionConfig.MoreSettings?.DisableNvarchar == true || item.DbType == System.Data.DbType.AnsiString || connectionConfig.DbType == DbType.Sqlite)
                     {
-                        result = result.Replace(item.ParameterName, $"'{item.Value.ObjToString().ToSqlFilter()}'");
+                        result = result.Replace(item.ParameterName, $"'{item.Value.ObjToString().Replace("@",guid).ToSqlFilter()}'");
                     }
                     else
                     {
-                        result = result.Replace(item.ParameterName, $"N'{item.Value.ObjToString().ToSqlFilter()}'");
+                        result = result.Replace(item.ParameterName, $"N'{item.Value.ObjToStringNoTrim().Replace("@", guid).ToSqlFilter()}'");
                     }
                 }
             }
-
+            result = result.Replace(guid, "@");
             return result;
         }
         public static string ByteArrayToPostgreByteaLiteral(byte[] data)
@@ -1697,9 +1977,46 @@ namespace SqlSugar
 
         internal static object DateOnlyToDateTime(object value)
         {
+            if (value is DateTime)
+                return value;
             if (value == null) return null;
             var method = value.GetType().GetMethods().First(it => it.GetParameters().Length == 0 && it.Name == "ToShortDateString");
             return method.Invoke(value, new object[] { });
+        }
+        internal static object DateTimeToDateOnly(object value)
+        {
+            if (value == null) return null;
+
+            // 获取DateOnly类型
+            Type dateOnlyType = Type.GetType("System.DateOnly, System.Runtime", throwOnError: false);
+            if (dateOnlyType == null)
+            {
+                throw new InvalidOperationException("DateOnly type not found.");
+            }
+
+            // 获取DateOnly的构造函数
+            var constructor = dateOnlyType.GetConstructor(new[] { typeof(int), typeof(int), typeof(int) });
+            if (constructor == null)
+            {
+                throw new InvalidOperationException("DateOnly constructor not found.");
+            }
+
+            // 使用反射调用DateTime的属性
+            var yearProperty = value.GetType().GetProperty("Year");
+            var monthProperty = value.GetType().GetProperty("Month");
+            var dayProperty = value.GetType().GetProperty("Day");
+
+            if (yearProperty == null || monthProperty == null || dayProperty == null)
+            {
+                throw new InvalidOperationException("DateTime properties not found.");
+            }
+
+            int year = (int)yearProperty.GetValue(value);
+            int month = (int)monthProperty.GetValue(value);
+            int day = (int)dayProperty.GetValue(value);
+
+            // 使用反射创建DateOnly实例
+            return constructor.Invoke(new object[] { year, month, day });
         }
 
 
@@ -1758,6 +2075,27 @@ namespace SqlSugar
                 return false;
             }
             return true;
+        }
+
+        internal static ConnMoreSettings GetMoreSetting(ExpressionContext context)
+        {
+            return context?.SugarContext?.Context?.CurrentConnectionConfig?.MoreSettings ?? new ConnMoreSettings();
+        }
+
+        public static object NewGuid()
+        {
+            if (StaticConfig.CustomGuidFunc != null)
+            {
+                return StaticConfig.CustomGuidFunc();
+            }
+            else if (StaticConfig.CustomGuidByValueFunc != null)
+            {
+                return StaticConfig.CustomGuidByValueFunc(Guid.NewGuid());
+            }
+            else
+            {
+                return Guid.NewGuid();
+            }
         }
     }
 }

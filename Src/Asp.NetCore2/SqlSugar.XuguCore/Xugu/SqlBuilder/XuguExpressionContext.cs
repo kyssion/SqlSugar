@@ -9,7 +9,7 @@ namespace SqlSugar.Xugu
         public XuguExpressionContext() => base.DbMehtods = new XuguMethod();
         public override string SqlTranslationLeft { get; } = "\"";
         public override string SqlTranslationRight { get; } = "\"";
-        public override bool IsTranslationText(string name)=> name.IsContainsIn(UtilConstants.Space, "(", ")");
+        public override bool IsTranslationText(string name)=> name.IsContainsIn("\"",UtilConstants.Space, "(", ")");
         public override string GetLimit() => "";
     }
     public partial class XuguMethod : DefaultDbMethod, IDbMethods
@@ -21,6 +21,36 @@ namespace SqlSugar.Xugu
             return string.Format(" LENGTH({0}) ", parameter.MemberName);
         }
 
+        public override string DateAddByType(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            var parameter2 = model.Args[1];
+            var parameter3 = model.Args[2];
+            if (parameter3.MemberValue.ObjToString() == "Millisecond")
+            {
+                parameter3.MemberValue = "Second";
+                return string.Format(" (DATE_ADD({1} , INTERVAL {2}/1000 {0})) ", parameter3.MemberValue, parameter.MemberName, parameter2.MemberName);
+            }
+            return string.Format(" (DATE_ADD({1} , INTERVAL {2} {0})) ", parameter3.MemberValue, parameter.MemberName, parameter2.MemberValue);
+        }
+
+        public override string DateAddDay(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            var parameter2 = model.Args[1];
+            return string.Format(" (DATE_ADD({0}, INTERVAL {1} day)) ", parameter.MemberName, parameter2.MemberName);
+        }
+        public override string DateIsSameDay(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            var parameter2 = model.Args[1];
+            return string.Format(" ( cast({0} as date)= cast( {1} as date) ) ", parameter.MemberName, parameter2.MemberName); ;
+        }
+        public override string ToDecimal(MethodCallExpressionModel model)
+        {
+            var parameter = model.Args[0];
+            return string.Format(" CAST({0} AS DECIMAL(18,6))", parameter.MemberName);
+        }
         public override string IsNull(MethodCallExpressionModel model)
         {
             var parameter = model.Args[0];

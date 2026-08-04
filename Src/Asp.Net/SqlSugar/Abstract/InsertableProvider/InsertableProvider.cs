@@ -408,7 +408,7 @@ namespace SqlSugar
                 return await this.Context.Queryable<T>().WhereClassByPrimaryKey(data).IncludesAllFirstLayer().FirstAsync();
             }
         }
-        public async Task<bool> ExecuteCommandIdentityIntoEntityAsync()
+        public virtual async Task<bool> ExecuteCommandIdentityIntoEntityAsync()
         {
             var result = InsertObjs.First();
             var identityKeys = GetIdentityKeys();
@@ -510,6 +510,7 @@ namespace SqlSugar
             result.TableName = this.InsertBuilder.AsName;
             result.IsEnableDiffLogEvent = this.IsEnableDiffLogEvent;
             result.DiffModel = this.diffModel;
+            result.IsMySqlIgnore = this.InsertBuilder.MySqlIgnore;
             result.IsOffIdentity = this.InsertBuilder.IsOffIdentity;
             if(this.InsertBuilder.DbColumnInfoList.Any())
               result.InsertColumns = this.InsertBuilder.DbColumnInfoList.GroupBy(it => it.TableId).First().Select(it=>it.DbColumnName).ToList();
@@ -567,7 +568,21 @@ namespace SqlSugar
             this.InsertBuilder.MySqlIgnore = true; 
             return this;
         }
-
+        public IInsertable<T> IgnoreInsertError() 
+        {
+            this.InsertBuilder.MySqlIgnore = true;
+            return this;
+        }
+        public IInsertable<T> MySqlIgnore(bool isIgnore) {
+            if (isIgnore)
+            {
+                return MySqlIgnore();
+            }
+            else 
+            {
+                return this;
+            }
+        }
         public IInsertable<T> InsertColumns(Expression<Func<T, object>> columns)
         {
             if (columns == null) return this;
@@ -751,6 +766,7 @@ namespace SqlSugar
             result.Helper = helper;
             result.SplitType = splitType;
             result.TableNames = new List<KeyValuePair<string, object>>();
+            result.MySqlIgnore = this.InsertBuilder.MySqlIgnore;
             foreach (var item in this.InsertObjs)
             {
                 var splitFieldValue = helper.GetValue(splitType, item);
@@ -763,6 +779,10 @@ namespace SqlSugar
 
         public SplitInsertable<T> SplitTable()
         {
+            if (StaticConfig.SplitTableCreateTableFunc != null)
+            {
+                StaticConfig.SplitTableCreateTableFunc(typeof(T),this.InsertObjs);
+            }
             UtilMethods.StartCustomSplitTable(this.Context, typeof(T));
             var splitTableAttribute = typeof(T).GetCustomAttribute<SplitTableAttribute>();
             if (splitTableAttribute != null)

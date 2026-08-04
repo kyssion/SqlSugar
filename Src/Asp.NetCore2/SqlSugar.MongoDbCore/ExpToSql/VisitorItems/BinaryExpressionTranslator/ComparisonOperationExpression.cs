@@ -1,0 +1,137 @@
+﻿using Dm;
+using MongoDB.Bson;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Text;
+
+namespace SqlSugar.MongoDb
+{
+    public partial class BinaryExpressionTranslator
+    {
+        private BsonDocument GetComparisonOperation(BinaryExpression expr, BsonValue field, BsonValue value, bool leftIsMember, bool rightIsMember, string op)
+        {
+            var isLeftMember = IsLeftValue(leftIsMember, rightIsMember, op);
+            var isRightMember = IsRightValue(leftIsMember, rightIsMember, op);
+            var isKeyValue = isLeftMember || isRightMember;
+            if (isKeyValue)
+                return ComparisonKeyValue(expr, field, value, op, isLeftMember);
+            else
+                return ComparisonNotKeyValue(field, value, op);
+        }
+
+        private static BsonDocument ComparisonNotKeyValue(BsonValue field, BsonValue value, string op)
+        {   // 如果 field 是一个表达式对象（如 BsonDocument），则使用 $expr
+            if (field is BsonDocument bd)
+            {
+                return new BsonDocument
+                {
+                    { "$expr", new BsonDocument(op, new BsonArray { field, value }) }
+                };
+            }
+            var leftKey = field.ToString();
+            return new BsonDocument
+                   {
+                       { leftKey, new BsonDocument { { op, value } } }
+                   };
+        }
+
+        private BsonDocument ComparisonKeyValue(BinaryExpression expr, BsonValue field, BsonValue value, string op, bool isLeftMember)
+        {
+            string leftValue = isLeftMember ? field.ToString() : value.ToString();
+            BsonValue rightValue = isLeftMember ?   value: field;
+            if (isLeftMember == false)
+            {
+                // 如果是大于、小于、大于等于、小于等于，op的值要取反
+                if (op == "$gt") op = "$lt";
+                else if (op == "$lt") op = "$gt";
+                else if (op == "$gte") op = "$lte";
+                else if (op == "$lte") op = "$gte";
+            }
+            var expression = isLeftMember ? MongoDbExpTools.RemoveConvert(expr.Left) as MemberExpression : MongoDbExpTools.RemoveConvert(expr.Right) as MemberExpression;
+            EntityColumnInfo CurrentColumnInfo = null;
+            Type iSugarDataConverterType=UtilConstants.StringType;
+            leftValue = GetLeftValue(leftValue, expression, ref CurrentColumnInfo);
+            if (CurrentColumnInfo?.SqlParameterDbType is Type t && typeof(ISugarDataConverter).IsAssignableFrom(t)) 
+            {
+                iSugarDataConverterType = t;
+            }
+            rightValue = GetRightValue(CurrentColumnInfo, rightValue);
+            if (iSugarDataConverterType != UtilConstants.StringType) 
+            { 
+                var p = UtilMethods.GetParameterConverter(0, _context.context, rightValue,expression,CurrentColumnInfo);
+                rightValue = UtilMethods.MyCreate(p.Value);
+            }
+            if (IsEq(op)) 
+                return GetEqResult(leftValue, rightValue); 
+            else 
+                return GetOtherResult(op, leftValue, rightValue); 
+        }
+
+        private BsonDocument GetOtherResult(string op, string leftValue, BsonValue rightValue)
+        {
+            if (_visitorContext?.IsText == true)
+            {
+                // 三元条件格式: { "$gt": ["$Age", 0] }
+                return new BsonDocument
+                {
+                    { op, new BsonArray {UtilMethods.GetMemberName(leftValue), rightValue } }
+                };
+            }
+            else
+            {
+                return new BsonDocument
+                    {
+                        { leftValue, new BsonDocument { { op, rightValue } } }
+                    };
+            }
+        }
+
+        private static BsonDocument GetEqResult(string leftValue, BsonValue rightValue)
+        {
+            return new BsonDocument { { leftValue, rightValue } };
+        }
+
+        private string GetLeftValue(string leftValue, MemberExpression expression, ref EntityColumnInfo CurrentColumnInfo)
+        {
+            if (expression != null)
+            {
+                if (expression.Expression is ParameterExpression parameter)
+                {
+                    if (_context?.context != null)
+                    {
+                        var entityInfo = _context.context.EntityMaintenance.GetEntityInfo(parameter.Type);
+                        var columnInfo = entityInfo.Columns.FirstOrDefault(s => s.PropertyName == leftValue || s.DbColumnName == leftValue);
+                        if (columnInfo != null)
+                        {
+                            leftValue = columnInfo.DbColumnName;
+                            CurrentColumnInfo = columnInfo;
+                        }
+                    }
+                }
+            }
+            return leftValue;
+        }
+
+        private BsonValue GetRightValue(EntityColumnInfo  entityColumnInfo, BsonValue rightValue)
+        {
+            if (entityColumnInfo?.IsPrimarykey==true||entityColumnInfo?.DataType==nameof(ObjectId)) 
+            {
+                var str = rightValue?.ToString();
+                if (UtilMethods.IsValidObjectId(str))
+                {
+                    rightValue = ObjectId.Parse(str);
+                } 
+            }
+            else  
+            {
+                if (rightValue!=null&&rightValue.IsString&&UtilMethods.IsValidObjectId(rightValue.AsString))
+                {
+                    rightValue = ObjectId.Parse(rightValue.AsString);
+                }
+            }
+            return rightValue;
+        }
+    }
+}

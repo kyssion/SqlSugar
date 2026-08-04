@@ -64,6 +64,8 @@ namespace SqlSugar
         }
         public virtual void InitTables(Type entityType)
         {
+            var oldSlave = this.Context.CurrentConnectionConfig.SlaveConnectionConfigs;
+            this.Context.CurrentConnectionConfig.SlaveConnectionConfigs = null;
             var splitTableAttribute = entityType.GetCustomAttribute<SplitTableAttribute>();
             if (splitTableAttribute != null) 
             {
@@ -104,6 +106,7 @@ namespace SqlSugar
 
                 RestMappingTables(oldTableList);
             }
+            this.Context.CurrentConnectionConfig.SlaveConnectionConfigs = oldSlave;
 
         }
 
@@ -188,7 +191,14 @@ namespace SqlSugar
             TableDifferenceProvider result = new TableDifferenceProvider();
             foreach (var type in types)
             {
-                GetDifferenceTables(result, type);
+                try
+                { 
+                    GetDifferenceTables(result, type);
+                }
+                catch (Exception ex)
+                {
+                    Check.ExceptionEasy($"实体{type.Name} 出错,具体错误:" + ex.Message, $" {type.Name} error." + ex.Message);
+                }
             }
             return result;
         }
@@ -197,10 +207,12 @@ namespace SqlSugar
         #region Core Logic
         private void GetDifferenceTables(TableDifferenceProvider result, Type type)
         {
+            var isCreate = false;
             var tempTableName = "TempDiff" + DateTime.Now.ToString("yyMMssHHmmssfff");
             var oldTableName = this.Context.EntityMaintenance.GetEntityInfo(type).DbTableName;
             var db = new SqlSugarProvider(UtilMethods.CopyConfig(this.Context.CurrentConnectionConfig));
-            UtilMethods.IsNullReturnNew(db.CurrentConnectionConfig.ConfigureExternalServices);
+            db.CurrentConnectionConfig.SlaveConnectionConfigs = null;
+            db.CurrentConnectionConfig.ConfigureExternalServices=UtilMethods.IsNullReturnNew(db.CurrentConnectionConfig.ConfigureExternalServices);
             db.CurrentConnectionConfig.ConfigureExternalServices.EntityNameService += (x, p) =>
             {
                 p.IsDisabledUpdateAll = true;//Disabled update
@@ -213,6 +225,7 @@ namespace SqlSugar
                 var codeFirst=db.CodeFirst;
                 codeFirst.SetStringDefaultLength(this.DefultLength);
                 codeFirst.InitTables(type);
+                isCreate = true;
                 var tables = db.DbMaintenance.GetTableInfoList(false);
                 var oldTableInfo = tables.FirstOrDefault(it=>it.Name.EqualCase(oldTableName));
                 var newTableInfo = tables.FirstOrDefault(it => it.Name.EqualCase(oldTableName));
@@ -237,7 +250,10 @@ namespace SqlSugar
             }
             finally
             {
-                db.DbMaintenance.DropTable(tempTableName);
+                if (isCreate)
+                {
+                    db.DbMaintenance.DropTable(tempTableName);
+                }
             }
         }
         protected virtual void Execute(Type entityType,EntityInfo entityInfo)
@@ -735,6 +751,14 @@ namespace SqlSugar
                 return false;
             }
             else if (ec.UnderType == UtilConstants.BoolType && dc.OracleDataType?.EqualCase("number")==true) 
+            {
+                return false;
+            }
+            else if (ec.UnderType == UtilConstants.LongType && dc.Length == 19 && dc.DecimalDigits == 0 && dc.OracleDataType?.EqualCase("number") == true)
+            {
+                return false;
+            }
+            else if (dataType.EqualCase("timestamp") && properyTypeName.EqualCase("timestamptz"))
             {
                 return false;
             }

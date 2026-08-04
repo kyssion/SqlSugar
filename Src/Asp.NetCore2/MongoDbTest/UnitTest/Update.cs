@@ -1,0 +1,133 @@
+﻿using Newtonsoft.Json.Converters;
+using SqlSugar;
+using SqlSugar.DbConvert;
+using SqlSugar.MongoDb;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace MongoDbTest 
+{
+    public class Update
+    {
+        internal static void Init()
+        {
+            var db = DbHelper.GetNewDb();
+            db.CodeFirst.InitTables<Student, Student2>();
+            db.DbMaintenance.TruncateTable<Student, Student2>();
+
+            /***************************Update by object***************************/
+            db.Insertable(new Student() { Age = 1, Name = "11", SchoolId = "111", CreateDateTime = DateTime.Now }).ExecuteCommandAsync().GetAwaiter().GetResult();
+            db.Insertable(new List<Student>() {
+            new Student() { Age = 2, Name = "22", SchoolId = "222", CreateDateTime = DateTime.Now },
+            new Student() { Age = 3, Name = "33", SchoolId = "333", CreateDateTime = DateTime.Now }
+            }).ExecuteCommandAsync().GetAwaiter().GetResult();
+
+            var list=db.Queryable<Student>().ToList();
+            db.Insertable(new Student() { Age = 1, Name = "xx", SchoolId = "111", CreateDateTime = DateTime.Now }).ExecuteCommandAsync().GetAwaiter().GetResult();
+            foreach (var item in list)
+            {
+                item.Name = item.Name + "haha";
+            }
+            db.Updateable(list).ExecuteCommand();
+            var list2 = db.Queryable<Student>().ToList();
+            foreach (var item in list2)
+            {
+                if (item.Name == "xx") continue;
+                if (!item.Name.EndsWith("haha")) Cases.ThrowUnitError();
+            }
+            db.Updateable<Student>()
+                .SetColumns(it => new Student() { Name = "yy" }).Where(it => it.Name == "xx").ExecuteCommand();
+
+           var datas= db.Queryable<Student>().Where(it => it.Id == list2.Last().Id).ToList();
+           if(datas.Count!=1|| datas.First().Name!="yy") Cases.ThrowUnitError();
+
+            db.Updateable(new Student() { Name = "yy", Age = 1111, SchoolId = "1", CreateDateTime = DateTime.Now })
+                 .WhereColumns(it => it.Name).ExecuteCommand();
+            var data=db.Queryable<Student>().Where(it => it.Name == "yy").ToList();
+            if(data.First().Age!=1111|| data.Count!=1) Cases.ThrowUnitError();
+
+            db.Insertable(new Student() { Age = 1, Name = "ss", SchoolId = "111", CreateDateTime = DateTime.Now }).ExecuteCommand();
+            db.Updateable(new List<Student>() 
+            {
+               new Student() { Name = "yy", Age = 22222, SchoolId = "1", CreateDateTime = DateTime.Now },
+               new Student() { Name = "ss", Age = 33333, SchoolId = "1", CreateDateTime = DateTime.Now }
+            }
+            ).WhereColumns(it => it.Name).ExecuteCommand();
+            var list3=db.Queryable<Student>().Where(it => it.Age == 33333).ToList();
+            if (list3.First().Name != "ss"|| list3.Count!=1) Cases.ThrowUnitError();
+            var list4 = db.Queryable<Student>().Where(it => it.Age == 22222).ToList();
+            if (list4.First().Name != "yy" || list4.Count != 1) Cases.ThrowUnitError();
+            db.Updateable(new List<Student>()
+            {
+               new Student() { Name = "yy", Age = 22222, SchoolId = "3", CreateDateTime = DateTime.Now },
+               new Student() { Name = "ss", Age = 33333, SchoolId = "4", CreateDateTime = DateTime.Now }
+            }
+            ).WhereColumns(it =>new { it.Name,it.Age }).ExecuteCommand();
+            var list5 = db.Queryable<Student>().Where(it => it.SchoolId == "3").ToList();
+            if(list5.Count!=1|| list5.First().Name!="yy") Cases.ThrowUnitError();
+
+            db.Insertable(new Student2() { DbType = DbType.Sqlite }).ExecuteCommand();
+            var x = db.Queryable<Student2>().ToDataTable();
+            if (x.Rows[0][0] is string==false)
+            {
+                Cases.ThrowUnitError();
+            }
+            db.Updateable(db.Queryable<Student2>().ToList()).ExecuteCommand();
+            var x2 = db.Queryable<Student2>().ToDataTable();
+            if (x2.Rows[0][0] is string==false) 
+            {
+                Cases.ThrowUnitError();
+            }
+            /***************************Update by sql***************************/
+            var ages=db.Queryable<Student>()
+                .Where(it => it.SchoolId == "3")
+                .Select(s => new
+                {
+                    name=s.Name,
+                    age = s.Age + 1
+                }).First();
+            db.Updateable<Student>()
+                .SetColumns(it => new Student()
+                {
+                    Name="jack",
+                    Age=it.Age+1
+                })
+                .Where(it => it.SchoolId == "3")
+                .ExecuteCommand();
+            var ages2 = db.Queryable<Student>().Where(it => it.SchoolId == "3").First();
+            if(ages.age!=ages2.Age) Cases.ThrowUnitError();
+            if (ages2.Name!="jack") Cases.ThrowUnitError();
+            db.Updateable<Student>()
+               .SetColumns(it => new Student()
+               {
+                   Name = "jack",
+                   Age = it.Age + 1
+               })
+               .Where(it => it.SchoolId == "3")
+           .ExecuteCommandAsync().GetAwaiter().GetResult();
+            var ages3 = db.Queryable<Student>().Where(it => it.SchoolId == "3").First();
+            if (ages.age+1 != ages3.Age) Cases.ThrowUnitError();
+
+        }
+        [SqlSugar.SugarTable("UnitStudentdghhuesd3z1")]
+        public class Student : MongoDbBase
+        {
+            public string Name { get; set; }
+
+            public string SchoolId { get; set; }
+
+            public int Age { get; set; }
+
+            public DateTime CreateDateTime { get; set; }
+        }
+        [SqlSugar.SugarTable("UnitStudentdghhuesd3z1222")]
+        public class Student2 : MongoDbBase
+        {
+            [SugarColumn(SqlParameterDbType =typeof(EnumToStringConvert))]
+            public DbType DbType { get; set; }
+        }
+    }
+}

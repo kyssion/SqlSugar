@@ -33,7 +33,11 @@ namespace SqlSugar
         public ISqlBuilder Builder { get; set; }
         #endregion
 
-        #region Splicing basic 
+        #region Splicing basic  
+        public List<SugarParameter> GroupParameters { get; set; }
+        public string GroupBySql { get; set; }
+        public string GroupBySqlOld { get; set; }
+        public Type AsType { get; set; }
         public bool IsParameterizedConstructor { get; set; }
         public string Hints { get; set; }
         internal AppendNavInfo AppendNavInfo { get; set; }
@@ -282,7 +286,7 @@ namespace SqlSugar
             };
             resolveExpress.Resolve(expression, resolveType);
             this.Parameters.AddRange(resolveExpress.Parameters.Select(it => new SugarParameter(it.ParameterName, it.Value, it.DbType) {  Size=it.Size,TypeName=it.TypeName, IsNvarchar2=it.IsNvarchar2}));
-            var result = resolveExpress.Result;
+            var result = resolveExpress.Result; 
             var isSingleTableHasSubquery = IsSingle() && resolveExpress.SingleTableNameSubqueryShortName.HasValue();
             if (isSingleTableHasSubquery)
             {
@@ -308,9 +312,9 @@ namespace SqlSugar
                 var db = Context;
                 BindingFlags flag = BindingFlags.Instance | BindingFlags.NonPublic| BindingFlags.Public;
                 var index = 0;
-                if (db.QueryFilter.GeFilterList != null)
+                if (db.QueryFilter.GetFilterList != null)
                 {
-                    foreach (var item in db.QueryFilter.GeFilterList)
+                    foreach (var item in db.QueryFilter.GetFilterList)
                     {
                         if (this.RemoveFilters != null && this.RemoveFilters.Length > 0) 
                         {
@@ -380,9 +384,9 @@ namespace SqlSugar
 
         public virtual void AppendFilter()
         {
-            if (!IsDisabledGobalFilter && this.Context.QueryFilter.GeFilterList.HasValue())
+            if (!IsDisabledGobalFilter && this.Context.QueryFilter.GetFilterList.HasValue())
             {
-                var gobalFilterList = this.Context.QueryFilter.GeFilterList.Where(it => it.FilterName.IsNullOrEmpty()).ToList();
+                var gobalFilterList = this.Context.QueryFilter.GetFilterList.Where(it => it.FilterName.IsNullOrEmpty()).ToList();
                 if (this.RemoveFilters != null && this.RemoveFilters.Length > 0) 
                 {
                     gobalFilterList = gobalFilterList.Where(it => !this.RemoveFilters.Contains(it.type)).ToList();
@@ -460,14 +464,30 @@ namespace SqlSugar
                 if (isSameName||ChildType.IsInterface)
                 {
                     var mysql = GetSql(exp, isSingle);
-                    if (ChildType.IsInterface)
+                    if (ChildType.IsInterface&&item.IsJoinQuery==true)
                     {
                         foreach (var joinInfoItem in this.JoinQueryInfos.Where(it => it.EntityType.GetInterfaces().Any(z=>z==ChildType)))
                         {
                             var addSql = mysql.Replace(itName, this.Builder.GetTranslationColumnName(joinInfoItem.ShortName) + ".");
                             addSql = ReplaceFilterColumnName(addSql, joinInfoItem.EntityType,joinInfoItem.ShortName);
-                            joinInfoItem.JoinWhere += (" AND " + Regex.Replace(addSql, "^ (WHERE|AND) ", ""));
+                            joinInfoItem.JoinWhere += ( " AND " + Regex.Replace(addSql, "^ (WHERE|AND) ", ""));
                         }
+                    }
+                    else if (ChildType.IsInterface && item.IsJoinQuery == false)
+                    {
+                        {
+                            var addSql = mysql.Replace(itName, this.Builder.GetTranslationColumnName(TableShortName) + ".");
+                            addSql = ReplaceFilterColumnName(addSql, EntityType, TableShortName);
+                            var andOrWhere = this.WhereInfos.Any() ? " AND " : "WHERE";
+                            this.WhereInfos.Add(andOrWhere + Regex.Replace(addSql, "^ (WHERE|AND) ", ""));
+                        }
+                        foreach (var joinInfoItem in this.JoinQueryInfos.Where(it => it.EntityType.GetInterfaces().Any(z => z == ChildType)))
+                        {
+                            var addSql = mysql.Replace(itName, this.Builder.GetTranslationColumnName(joinInfoItem.ShortName) + ".");
+                            addSql = ReplaceFilterColumnName(addSql, joinInfoItem.EntityType, joinInfoItem.ShortName);
+                            this.WhereInfos.Add (" AND " + Regex.Replace(addSql, "^ (WHERE|AND) ", ""));
+                        } 
+                        return;
                     }
                     else
                     {
@@ -528,6 +548,13 @@ namespace SqlSugar
             }
             if (item.IsJoinQuery == false||isMain||isSingle|| isEasyJoin)
             {
+                if (item.IsJoinQuery == false&& ChildType.IsInterface)
+                {
+                    foreach (var joinInfo in this.JoinQueryInfos)
+                    {
+                        sql = ReplaceFilterColumnName(sql, joinInfo.EntityType, Builder.GetTranslationColumnName(joinInfo.ShortName));
+                    }
+                }
                 WhereInfos.Add(sql);
             }
             else 
@@ -566,7 +593,7 @@ namespace SqlSugar
             }
         }
 
-        private string ReplaceFilterColumnName(string sql, Type filterType,string shortName=null)
+        internal string ReplaceFilterColumnName(string sql, Type filterType,string shortName=null)
         {
             foreach (var column in this.Context.EntityMaintenance.GetEntityInfoWithAttr(filterType).Columns.Where(it => it.IsIgnore == false))
             {
@@ -895,7 +922,16 @@ namespace SqlSugar
                 {
                     result = result + " AS columnName";
                 }
-                this.SelectCacheKey = result;
+                if (this.GroupParameters?.Any()==true && this.GroupBySql.HasValue()) 
+                {
+                    var selectSql = UtilMethods.GetSqlString(DbType.SqlServer, result, UtilMethods.CopySugarParameters(this.Parameters).ToArray());
+                    if (selectSql.Contains(this.GroupBySql)) 
+                    {
+                        result = selectSql;
+                        this.GroupByIsReplace = true;
+                    }
+                }
+                this.SelectCacheKey = result; 
                 return result;
             }
         }
@@ -928,6 +964,11 @@ namespace SqlSugar
             if (result.IsNullOrEmpty())
             {
                 result = "*";
+            }
+            if (result.StartsWith(UtilConstants.GroupReplaceKey)) 
+            {
+                this.GroupByIsReplace = true;
+                result = result.Replace(UtilConstants.GroupReplaceKey, string.Empty);
             }
             return result;
         }
@@ -993,7 +1034,7 @@ namespace SqlSugar
                 }
                 if (IsSingle() && result.Contains("MergeTable") && result.Trim().EndsWith(" MergeTable") && TableShortName != null)
                 {
-                    result = result.Replace(") MergeTable  ", ") " + TableShortName+UtilConstants.Space);
+                    result = result.Replace(") MergeTable  ", ") " +this.Builder.GetTranslationColumnName(TableShortName)+UtilConstants.Space);
                     TableShortName = null;
                 }
                 if (IsSingle() && result.Contains("unionTable") && result.Trim().EndsWith(" unionTable")&& TableShortName!=null) 
@@ -1061,12 +1102,15 @@ namespace SqlSugar
 
         #region NoCopy
 
+        internal bool GroupByIsReplace { get; set; }
         internal List<QueryableFormat> QueryableFormats { get; set; }
         internal bool IsClone { get; set; }
         public bool NoCheckInclude { get;  set; }
         public virtual bool IsSelectNoAll { get; set; } = false;
         public List<string> AutoAppendedColumns { get;  set; }
-        public Dictionary<string, string> MappingKeys { get;  set; } 
+        public Dictionary<string, string> MappingKeys { get;  set; }
+        public List<KeyValuePair<string,string>> SelectNewIgnoreColumns { get; set; }
+        public bool IsAnyParameterExpression { get;  set; }
         #endregion
 
         private string GetTableName(string entityName)

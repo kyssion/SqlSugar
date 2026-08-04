@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
@@ -23,7 +23,7 @@ namespace SqlSugar
         public DiffLogModel diffModel { get; set; }
         public List<string> tempPrimaryKeys { get; set; }
         internal Action RemoveCacheFunc { get; set; }
-        internal List<T> DeleteObjects { get; set; }
+        public List<T> DeleteObjects { get; set; }
         public EntityInfo EntityInfo
         {
             get
@@ -119,6 +119,7 @@ namespace SqlSugar
             string tableName = this.Context.EntityMaintenance.GetTableName<T>();
             var primaryFields = this.GetPrimaryKeys();
             var isSinglePrimaryKey = primaryFields.Count == 1;
+            var isNvarchar = false;
             Check.Exception(primaryFields.IsNullOrEmpty(), string.Format("Table {0} with no primarykey", tableName));
             if (isSinglePrimaryKey)
             {
@@ -128,6 +129,7 @@ namespace SqlSugar
                 {
                     var entityPropertyName = this.Context.EntityMaintenance.GetPropertyName<T>(primaryField);
                     var columnInfo = EntityInfo.Columns.Single(it => it.PropertyName.Equals(entityPropertyName, StringComparison.CurrentCultureIgnoreCase));
+                    isNvarchar = columnInfo.SqlParameterDbType is System.Data.DbType dbtype && dbtype == System.Data.DbType.String;
                     var value = columnInfo.PropertyInfo.GetValue(deleteObj, null);
                     value = UtilMethods.GetConvertValue(value);
                     if (this.Context.CurrentConnectionConfig?.MoreSettings?.TableEnumIsString!=true&&
@@ -151,7 +153,15 @@ namespace SqlSugar
                 }
                 else if (primaryKeyValues.Count < 10000)
                 {
-                    var inValueString = primaryKeyValues.ToArray().ToJoinSqlInVals();
+                    var inValueString = string.Empty;
+                    if (isNvarchar)
+                    {
+                        inValueString = primaryKeyValues.ToArray().ToJoinSqlInValsByVarchar();
+                    }
+                    else
+                    {
+                        inValueString = primaryKeyValues.ToArray().ToJoinSqlInVals();
+                    }
                     Where(string.Format(DeleteBuilder.WhereInTemplate, SqlBuilder.GetTranslationColumnName(primaryFields.Single()), inValueString));
                 }
                 else
@@ -690,7 +700,7 @@ namespace SqlSugar
         }
 
 
-        private void After(string sql)
+        protected virtual void After(string sql)
         {
             if (this.IsEnableDiffLogEvent)
             {
@@ -711,7 +721,7 @@ namespace SqlSugar
             DataChangesAop(this.DeleteObjects);
         }
 
-        private void Before(string sql)
+        protected virtual void Before(string sql)
         {
             if (this.IsEnableDiffLogEvent)
             {
@@ -727,10 +737,19 @@ namespace SqlSugar
             }
         }
 
-        private List<DiffLogTableInfo> GetDiffTable(string sql, List<SugarParameter> parameters)
+        protected virtual List<DiffLogTableInfo> GetDiffTable(string sql, List<SugarParameter> parameters)
         {
             List<DiffLogTableInfo> result = new List<DiffLogTableInfo>();
             var whereSql = Regex.Replace(sql, ".* WHERE ", "", RegexOptions.Singleline);
+            if (IsExists(sql))
+            {
+                // 取第一个 WHERE 后面的部分
+                var match = Regex.Match(sql, @"\bWHERE\b\s*(.*)", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    whereSql = match.Groups[1].Value;
+                }
+            }
             var dt = this.Context.Queryable<T>().AS(this.DeleteBuilder.AsName).Filter(null, true).Where(whereSql).AddParameters(parameters).ToDataTable();
             if (dt.Rows != null && dt.Rows.Count > 0)
             {
@@ -756,7 +775,7 @@ namespace SqlSugar
             }
             return result;
         }
-        private void DataAop(object deleteObj)
+        protected virtual void DataAop(object deleteObj)
         {
             var dataEvent = this.Context.CurrentConnectionConfig.AopEvents?.DataExecuting;
             if (deleteObj != null&& dataEvent!=null)
@@ -770,7 +789,7 @@ namespace SqlSugar
                 dataEvent(deleteObj,model);
             }
         }
-        private void DataChangesAop(List<T> deleteObjs)
+        protected virtual void DataChangesAop(List<T> deleteObjs)
         {
             var dataEvent = this.Context.CurrentConnectionConfig.AopEvents?.DataChangesExecuted;
             if(dataEvent != null&&deleteObjs != null)
@@ -789,6 +808,11 @@ namespace SqlSugar
                     }
                 }
             }
+        }
+
+        private static bool IsExists(string sql)
+        {
+            return UtilMethods.CountSubstringOccurrences(sql, "WHERE") > 1;
         }
     }
 }

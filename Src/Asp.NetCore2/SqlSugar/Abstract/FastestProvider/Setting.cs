@@ -15,6 +15,9 @@ namespace SqlSugar
         private string CharacterSet { get; set; }
         private bool IsDataAop { get; set; }
         private bool IsOffIdentity { get; set; }
+        private bool  IsIgnoreInsertError { get; set; }
+        private int BatchsSize { get; set; }
+
         public IFastest<T> SetCharacterSet(string CharacterSet) 
         {
             this.CharacterSet = CharacterSet;
@@ -23,6 +26,11 @@ namespace SqlSugar
         public IFastest<T> EnableDataAop()
         {
             this.IsDataAop = true;
+            return this;
+        }
+        public IFastest<T> IgnoreInsertError() 
+        {
+            this.IsIgnoreInsertError = true;
             return this;
         }
         public IFastest<T> RemoveDataCache() 
@@ -48,6 +56,11 @@ namespace SqlSugar
         public IFastest<T> OffIdentity() 
         {
             this.IsOffIdentity = true;
+            return this;
+        }
+        public IFastest<T> BatchSize(int batchSize)
+        {
+            this.BatchsSize = batchSize;
             return this;
         }
         public SplitFastest<T> SplitTable() 

@@ -551,6 +551,10 @@ namespace SqlSugar
                 foreach (var item in whereColumns)
                 {
                     var value = item.PropertyInfo.GetValue(dataItem.Item, null);
+                    if (value is string str&&str=="null") 
+                    {
+                        value = $"[null]";
+                    }
                     if (value != null&&value.GetType().IsEnum()) 
                     {
                         if (this.Context.CurrentConnectionConfig.MoreSettings?.TableEnumIsString == true)
@@ -571,11 +575,23 @@ namespace SqlSugar
                         var p = ParameterConverter.Invoke(obj, new object[] { value, 100 }) as SugarParameter;
                         value = p.Value;
                     }
+                    var cSharpTypeName = UtilMethods.GetTypeName(value);
+                    if (item.SqlParameterDbType is System.Data.DbType dbtype)
+                    {
+                        if (dbtype is System.Data.DbType.AnsiStringFixedLength) 
+                        {
+                            cSharpTypeName = "char";
+                        }
+                        else if (dbtype is System.Data.DbType.StringFixedLength)
+                        {
+                            cSharpTypeName = "nchar";
+                        }
+                    }
                     condition.ConditionalList.Add(new KeyValuePair<WhereType, ConditionalModel>(i==0?WhereType.Or :WhereType.And, new ConditionalModel()
                     {
                         FieldName = item.DbColumnName,
                         ConditionalType = ConditionalType.Equal,
-                        CSharpTypeName=UtilMethods.GetTypeName(value),
+                        CSharpTypeName= cSharpTypeName,
                         FieldValue = value==null?"null":value.ObjToString(formatTime),
                         FieldValueConvertFunc=this.Context.CurrentConnectionConfig.DbType==DbType.PostgreSQL? 
                                                UtilMethods.GetTypeConvert(value):null
@@ -597,6 +613,11 @@ namespace SqlSugar
             {
                 resolveExpress.PgSqlIsAutoToLower = true;
             }
+            resolveExpress.Context = this.Context;
+            resolveExpress.SugarContext = new ExpressionOutParameter()
+            {
+                 Context=this.Context
+            };
             resolveExpress.MappingColumns = Context.MappingColumns;
             resolveExpress.MappingTables = Context.MappingTables;
             resolveExpress.IgnoreComumnList = Context.IgnoreColumns;

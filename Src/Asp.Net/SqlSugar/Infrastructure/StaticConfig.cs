@@ -16,10 +16,12 @@ namespace SqlSugar
         public const string CodeFirst_BigString = "varcharmax,longtext,text,clob";
         public static string CodeFirst_MySqlCollate{get;set;}
         public static string CodeFirst_MySqlTableEngine { get; set; }
+        public static Type Backup_MySqlBackupType { get; set; }
 
         public static Func<long> CustomSnowFlakeFunc;
         public static Func<long> CustomSnowFlakeTimeErrorFunc;
         public static Func<Guid> CustomGuidFunc;
+        public static Func<Guid,Guid> CustomGuidByValueFunc;
 
         public static Action<object> CompleteQueryableFunc;
         public static Action<object> CompleteInsertableFunc;
@@ -28,6 +30,7 @@ namespace SqlSugar
         public static Action<ISqlSugarClient> CompleteDbFunc;
 
         public static Func<List<SplitTableInfo>> SplitTableGetTablesFunc;
+        public static Action<Type,object[]> SplitTableCreateTableFunc;
 
         public static bool Check_StringIdentity = true;
         public static bool EnableAllWhereIF = false;
@@ -36,5 +39,6 @@ namespace SqlSugar
         public static object DynamicExpressionParsingConfig;
         public static Action<ICacheService, string> CacheRemoveByLikeStringFunc { get; set; }
         public static Guid TableQuerySqlKey { get; set; }
+        public static string BulkCopy_MySqlCsvPath { get; set; }
     }
 }

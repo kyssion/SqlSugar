@@ -47,6 +47,7 @@ namespace XuguTest
 
            
             db.CodeFirst.InitTables<MY_USER>();
+            db.CodeFirst.InitTables<T_User2>();
 
             db.DbMaintenance.TruncateTable<MY_USER>();
 
@@ -92,6 +93,8 @@ namespace XuguTest
                 C_TIME_WITH_TIME_ZONE = DateTime.Now.TimeOfDay
 
             }).ExecuteCommand();
+
+            db.Insertable(new T_User2() { number = 1, table="a" }).ExecuteCommand();
 
          //   var list0=db.Ado.GetDataTable("select * from MY_USER");
 

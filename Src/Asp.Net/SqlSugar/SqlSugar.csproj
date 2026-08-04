@@ -166,11 +166,14 @@
     <Compile Include="Abstract\UpdateProvider\SplitTableUpdateByObjectProvider.cs" />
     <Compile Include="Abstract\UpdateProvider\UpdateNavMethodInfo.cs" />
     <Compile Include="Entities\DiscriminatorObject .cs" />
+    <Compile Include="Entities\DynamicSelectModel.cs" />
+    <Compile Include="Entities\NavigationInitializer.cs" />
     <Compile Include="Entities\PropertyMetadata.cs" />
     <Compile Include="Entities\DbFastestProperties.cs" />
     <Compile Include="Entities\DefaultCustom.cs" />
     <Compile Include="Entities\DeleteNavOptions.cs" />
     <Compile Include="Entities\JoinInfoParameter.cs" />
+    <Compile Include="Enum\PostgresIdentityStrategy.cs" />
     <Compile Include="Enum\SampleByUnit.cs" />
     <Compile Include="ExpressionsToSql\Common\ExpressionContextCase.cs" />
     <Compile Include="ExpressionsToSql\Common\ParameterExpressionVisitor.cs" />
@@ -190,6 +193,7 @@
     <Compile Include="ExpressionsToSql\Subquery\Items\SubDistinctCount.cs" />
     <Compile Include="ExpressionsToSql\Subquery\Items\SubFirst.cs" />
     <Compile Include="ExpressionsToSql\Subquery\Items\SubSelectStringJoin.cs" />
+    <Compile Include="ExpressionsToSql\Subquery\Items\SubTake.cs" />
     <Compile Include="ExpressionsToSql\Subquery\Items\SubToList.cs" />
     <Compile Include="ExpressionsToSql\Subquery\Items\SubWithNoLock.cs" />
     <Compile Include="ExpressionsToSql\Subquery\Items\SubEnableTableFilter.cs" />
@@ -271,6 +275,7 @@
     <Compile Include="Json2Sql\Utils\Json2SqlConfig.cs" />
     <Compile Include="Json2Sql\Utils\Json2SqlHelper.cs" />
     <Compile Include="OnlyNet\AsyncHelper.cs" />
+    <Compile Include="OnlyNet\StringExtensions.cs" />
     <Compile Include="Realization\Dm\SqlBuilder\DmBlukCopy.cs" />
     <Compile Include="Realization\Dm\SqlBuilder\DmFastBuilder.cs" />
     <Compile Include="Realization\Kdbndp\CodeFirst\KdbndpCodeFirst.cs" />
@@ -424,7 +429,7 @@
     <Compile Include="Realization\Dm\DbBind\DmDbBind.cs" />
     <Compile Include="Realization\Dm\DbFirst\DmDbFirst.cs" />
     <Compile Include="Realization\Dm\DbMaintenance\DmDbMaintenance.cs" />
-    <Compile Include="Realization\Dm\Insertable\DmInserttable.cs" />
+    <Compile Include="Realization\Dm\Insertable\DmInsertable.cs" />
     <Compile Include="Realization\Dm\DmProvider.cs" />
     <Compile Include="Realization\Dm\Queryable\DmQueryable.cs" />
     <Compile Include="Realization\Dm\SqlBuilder\DmBuilder.cs" />

@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Schema;
 
 namespace SqlSugar
 {
@@ -236,7 +237,10 @@ namespace SqlSugar
         {
             return  this.Context.DeleteNav(whereExpression);
         }
-
+        public DeleteNavTaskInit<T, T> DeleteNav<T>(params object[] primaryKeys) where T : class, new()
+        {
+            return this.Context.DeleteNav<T>(primaryKeys);
+        }
         public DeleteNavTaskInit<T, T> DeleteNav<T>(T data, DeleteNavRootOptions options) where T : class, new()
         {
             return this.Context.DeleteNav(data, options);
@@ -842,6 +846,10 @@ namespace SqlSugar
         #endregion
 
         #region More api
+        public string[] GetCurrentConfigIds()
+        {
+           return _AllClients.Select(it=>it.ConnectionConfig.ConfigId+string.Empty).ToArray();
+        }
         public IContextMethods Utilities { get { return this.Context.Utilities; } set { this.Context.Utilities = value; } }
         public AopProvider Aop => this.Context.Aop;
         public ICodeFirst CodeFirst => this.Context.CodeFirst;
@@ -1252,6 +1260,7 @@ namespace SqlSugar
                 }
                 var newDb= new SqlSugarClient(connections, _configAction);
                 newDb.QueryFilter = this.QueryFilter;
+                newDb.Ado.CommandTimeOut = this.Ado.CommandTimeOut;
                 return newDb;
             }
 

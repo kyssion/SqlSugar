@@ -17,6 +17,50 @@ namespace SqlSugar
                 express.IfTrue,
                 express.IfFalse
             };
+            SetSingleTableNameSubqueryShortName(express);
+            if (ExpressionTool.NoParameterOrSqlfunc(express.Test))
+            {
+                while (express != null)
+                {
+                    var ps = ExpressionTool.GetParameters(express.Test);
+                    if (ps?.Count == 0)
+                    {
+                        var value = ExpressionTool.DynamicInvoke(express.Test);
+                        if (value is bool boolValue)
+                        {
+                            args[0] = boolValue ? UtilConstants.ExpTrue :UtilConstants.ExpFalse;
+                            // 根据结果选择分支
+                            var next = boolValue ? express.IfTrue : express.IfFalse;
+                            args[1] = next;
+                            args[2] = next;
+
+                            // 如果选择的分支还是一个条件表达式，就继续展开
+                            if (ExpressionTool.RemoveConvert(next) is ConditionalExpression childConditional)
+                            {
+                                express = childConditional;
+                                args = new List<Expression>() {
+                                        express.Test,
+                                        express.IfTrue,
+                                        express.IfFalse
+                                    };
+                                continue;
+                            }
+                            else
+                            {
+                                break; // 到底了，不是条件表达式，跳出循环
+                            }
+                        }
+                        else
+                        {
+                            break; // 不是bool，无法判断，退出
+                        }
+                    }
+                    else
+                    {
+                        break; // 有参数，不能动态执行，退出
+                    }
+                }
+            }
             if (IsBoolMember(express))
             {
                 Expression trueValue = Expression.Constant(true);
@@ -45,6 +89,46 @@ namespace SqlSugar
                     break;
             }
         }
+
+        private void SetSingleTableNameSubqueryShortName(ConditionalExpression express)
+        {
+            if (this.Context.IsSingle && express.Test is MethodCallExpression callExpression)
+            {
+                var list = callExpression.Arguments.ToList();
+                list.Add(callExpression);
+                if (express.IfTrue is MethodCallExpression callExpressionLeft) 
+                {
+                    list.Add(callExpressionLeft);
+                    list.AddRange(callExpressionLeft.Arguments);
+                }
+                if (express.IfFalse is MethodCallExpression callExpressionRight)
+                {
+                    list.Add(callExpressionRight);
+                    list.AddRange(callExpressionRight.Arguments);
+                }
+                foreach (var item in list)
+                {
+                    if (item is MethodCallExpression itemObj)
+                    {
+                        if (ExpressionTool.IsSubQuery(itemObj))
+                        {
+                            if (this.Context.SingleTableNameSubqueryShortName == null)
+                            {
+                                if (this.Context.SugarContext?.QueryBuilder?.SelectValue is LambdaExpression lambda)
+                                {
+                                    if (lambda?.Parameters?.Count == 1)
+                                    {
+                                        this.Context.SingleTableNameSubqueryShortName = lambda.Parameters.FirstOrDefault()?.Name;
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
 
         private static bool IsBoolMember(ConditionalExpression express)
         {

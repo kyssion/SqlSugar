@@ -134,6 +134,10 @@ namespace SqlSugar
                         }
                         var value = GetNewExpressionValue(express.Object);
                         var dateString2 = this.Context.DbMehtods.GetDateString(value, format);
+                        if (IsSqlServerModel()) 
+                        {
+                            dateString2= string.Format("FORMAT({0},'{1}','en-US')", value, format);
+                        }
                         if (dateString2 == null)
                         {
                             var dateString = GeDateFormat(format, value);
@@ -274,9 +278,17 @@ namespace SqlSugar
             foreach (var item in args)
             {
                 var expItem = item;
-                if (item is UnaryExpression)
+                if (name=="IIF" && item is UnaryExpression)
+                {
+                    expItem = ExpressionTool.RemoveConvert(expItem);
+                }
+                else if (item is UnaryExpression)
                 {
                     expItem = (item as UnaryExpression).Operand;
+                }
+                else if (item is MethodCallExpression callExpression&& callExpression.Method.Name== "op_Implicit") 
+                {
+                    expItem = callExpression.Arguments[0];
                 }
                 AppendItem(parameter, name, args, model, expItem);
             }

@@ -42,6 +42,13 @@ namespace SqlSugar
             var result = inertable.GetType().GetMethod("ExecuteReturnIdentity").Invoke(inertable, new object[] { });
             return (int)result;
         }
+        public long ExecuteReturnBigIdentity()
+        {
+            if (Context == null) return 0;
+            var inertable = MethodInfo.Invoke(Context, new object[] { objectValue });
+            var result = inertable.GetType().GetMethod("ExecuteReturnBigIdentity").Invoke(inertable, new object[] { });
+            return (long)result;
+        }
         public async Task<int> ExecuteReturnIdentityAsync()
         {
             if (Context == null) return 0;
@@ -49,12 +56,29 @@ namespace SqlSugar
             var result = inertable.GetType().GetMyMethod("ExecuteReturnIdentityAsync",0).Invoke(inertable, new object[] { });
             return await (Task<int>)result;
         }
+        public async Task<long> ExecuteReturnBigIdentityAsync()
+        {
+            if (Context == null) return 0;
+            var inertable = MethodInfo.Invoke(Context, new object[] { objectValue });
+            var result = inertable.GetType().GetMyMethod("ExecuteReturnBigIdentityAsync", 0).Invoke(inertable, new object[] { });
+            return await (Task<long>)result;
+        }
 
         public CommonMethodInfo AS(string tableName)
         {
             var inertable = MethodInfo.Invoke(Context, new object[] { objectValue });
             var newMethod = inertable.GetType().GetMyMethod("AS", 1,typeof(string));
             var result = newMethod.Invoke(inertable, new object[] { tableName });
+            return new CommonMethodInfo()
+            {
+                Context = result
+            };
+        }
+        public CommonMethodInfo EnableDiffLogEvent(object businessData = null)
+        {
+            var inertable = MethodInfo.Invoke(Context, new object[] { objectValue });
+            var newMethod = inertable.GetType().GetMyMethod("EnableDiffLogEvent", 1, typeof(object));
+            var result = newMethod.Invoke(inertable, new object[] { businessData });
             return new CommonMethodInfo()
             {
                 Context = result

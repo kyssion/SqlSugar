@@ -71,6 +71,7 @@ namespace SqlSugar
                     //new KeyValuePair<string, CSharpDataType>("int1",CSharpDataType.@byte),
                     new KeyValuePair<string, CSharpDataType>("smallint",CSharpDataType.@short),
                     new KeyValuePair<string, CSharpDataType>("smallint",CSharpDataType.@byte),
+                    new KeyValuePair<string, CSharpDataType>("tinyint",CSharpDataType.@byte),
                     new KeyValuePair<string, CSharpDataType>("int4",CSharpDataType.@int),
                     new KeyValuePair<string, CSharpDataType>("uint4",CSharpDataType.@int),
                     new KeyValuePair<string, CSharpDataType>("integer",CSharpDataType.@int),
@@ -99,6 +100,7 @@ namespace SqlSugar
                     new KeyValuePair<string, CSharpDataType>("name",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("text",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("char",CSharpDataType.@string),
+                    new KeyValuePair<string, CSharpDataType>("nchar",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("character",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("cidr",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("circle",CSharpDataType.@string),
@@ -109,16 +111,22 @@ namespace SqlSugar
                     new KeyValuePair<string, CSharpDataType>("varcharbyte varying",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("bpcharbyte",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("nvarchar",CSharpDataType.@string),
+                    new KeyValuePair<string, CSharpDataType>("characterbyte",CSharpDataType.@string),
+                    new KeyValuePair<string, CSharpDataType>("information_schema.character_data",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("uuid",CSharpDataType.Guid),
+                    new KeyValuePair<string, CSharpDataType>("uniqueidentifier",CSharpDataType.Guid),
                     new KeyValuePair<string, CSharpDataType>("xml",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("json",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("rowid",CSharpDataType.@string),
-
+                    new KeyValuePair<string, CSharpDataType>("information_schema.sql_identifier",CSharpDataType.@string),
+                    new KeyValuePair<string, CSharpDataType>("information_schema.cardinal_number",CSharpDataType.@string),
                     new KeyValuePair<string, CSharpDataType>("interval",CSharpDataType.@decimal),
                     new KeyValuePair<string, CSharpDataType>("lseg",CSharpDataType.@decimal),
                     new KeyValuePair<string, CSharpDataType>("macaddr",CSharpDataType.@decimal),
                     new KeyValuePair<string, CSharpDataType>("money",CSharpDataType.@decimal),
                     new KeyValuePair<string, CSharpDataType>("timestamp",CSharpDataType.DateTime),
+                    new KeyValuePair<string, CSharpDataType>("datetime2",CSharpDataType.DateTime),
+                    new KeyValuePair<string, CSharpDataType>("datetime",CSharpDataType.DateTime),
                     new KeyValuePair<string, CSharpDataType>("timestamp with time zone",CSharpDataType.DateTime),
                     new KeyValuePair<string, CSharpDataType>("timestamptz",CSharpDataType.DateTime),
                     new KeyValuePair<string, CSharpDataType>("timestamp without time zone",CSharpDataType.DateTime),
@@ -131,9 +139,20 @@ namespace SqlSugar
                     new KeyValuePair<string, CSharpDataType>("bit",CSharpDataType.byteArray),
                     new KeyValuePair<string, CSharpDataType>("blob",CSharpDataType.byteArray),
                     new KeyValuePair<string, CSharpDataType>("bit varying",CSharpDataType.byteArray),
+                    new KeyValuePair<string, CSharpDataType>("binary",CSharpDataType.byteArray),
+                    new KeyValuePair<string, CSharpDataType>("varbinary",CSharpDataType.byteArray),
+                    new KeyValuePair<string, CSharpDataType>("image",CSharpDataType.byteArray),
                     new KeyValuePair<string, CSharpDataType>("varbit",CSharpDataType.@byte),
-                    new KeyValuePair<string, CSharpDataType>("regclass",CSharpDataType.@object)
-                    
+                    new KeyValuePair<string, CSharpDataType>("rowversion",CSharpDataType.byteArray),
+                    new KeyValuePair<string, CSharpDataType>("regclass",CSharpDataType.@object),
+
+                    new KeyValuePair<string, CSharpDataType>("geometry",CSharpDataType.@object),
+                    new KeyValuePair<string, CSharpDataType>("public.geometry",CSharpDataType.@object),
+                    new KeyValuePair<string, CSharpDataType>("geography",CSharpDataType.@object),
+                    new KeyValuePair<string, CSharpDataType>("public.geography",CSharpDataType.@object),
+
+                    new KeyValuePair<string, CSharpDataType>("dsinterval",CSharpDataType.TimeSpan),
+                    new KeyValuePair<string, CSharpDataType>("yminterval",CSharpDataType.@int),
                 };
         public override List<string> StringThrow
         {

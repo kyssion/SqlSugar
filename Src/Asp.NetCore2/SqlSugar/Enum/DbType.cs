@@ -7,7 +7,7 @@ namespace SqlSugar
 {
     public enum DbType
     {
-        MySql ,
+        MySql,
         SqlServer,
         Sqlite,
         Oracle,
@@ -33,6 +33,14 @@ namespace SqlSugar
         Doris,
         Xugu,
         GoldenDB,
-        Custom =900
+        TDSQLForPGODBC,
+        TDSQLForOracleODBC,
+        TDSQL,
+        HANA,
+        DB2,
+        GaussDBNative,
+        DuckDB,
+        MongoDb,
+        Custom = 900
     }
 }

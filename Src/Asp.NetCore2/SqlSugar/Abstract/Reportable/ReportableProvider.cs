@@ -215,6 +215,10 @@ namespace SqlSugar
             {
                 return $" CAST( NULL AS timestamp) ";
             }
+            else if (entityColumnInfo != null && entityColumnInfo.IsJson && value!=null)
+            {
+                return $"'{this.Context.Utilities.SerializeObject(value).ToSqlFilter()}'";
+            }
             if (value == null)
                 return "null";
             var type =UtilMethods.GetUnderType(value.GetType());
@@ -273,7 +277,7 @@ namespace SqlSugar
                     Args = new List<MethodCallExpressionArgs>() {
                   new MethodCallExpressionArgs(){
                    IsMember=true,
-                   MemberName= formatBuilder.FormatValue(value)
+                   MemberName= formatBuilder.FormatValue(UtilMethods.DateOnlyToDateTime(value))
                   }
                  }
                 });

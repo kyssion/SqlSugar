@@ -106,6 +106,24 @@ namespace SqlSugar
             result.QueryBuilder.LambdaExpressions.ParameterIndex = this.QueryBuilder.LambdaExpressions.ParameterIndex;
             return result;
         }
+        public ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12> LeftJoinIF<T12>(bool isJoin, ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression)
+        {
+            var result = LeftJoin(joinQueryable, joinExpression);
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
+        public ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> InnerJoinIF<T12>(bool isJoin, ISugarQueryable<T12> joinQueryable, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression)
+        {
+            var result = InnerJoin(joinQueryable, joinExpression);
+            if (isJoin == false)
+            {
+                result.QueryBuilder.JoinQueryInfos.Remove(result.QueryBuilder.JoinQueryInfos.Last());
+            }
+            return result;
+        }
         public ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> LeftJoin<T12>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, bool>> joinExpression)
         {
             this.Context.InitMappingInfo<T12>();
@@ -328,6 +346,13 @@ namespace SqlSugar
         #endregion
 
         #region Select
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, TResult>> falseSelectExpression)
+        {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
+        } 
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10,T11, TResult>> expression, bool isAutoFill)
         {
             var clone = this.Select(expression).Clone();
@@ -336,7 +361,9 @@ namespace SqlSugar
             {
                 sql = " ";
             }
+            UtilMethods.UpdateQueryBuilderByClone(this.QueryBuilder, clone);
             this.QueryBuilder.Parameters = clone.QueryBuilder.Parameters;
+            this.QueryBuilder.SelectNewIgnoreColumns = clone.QueryBuilder.SelectNewIgnoreColumns;
             this.QueryBuilder.SubToListParameters = clone.QueryBuilder.SubToListParameters;
             this.QueryBuilder.LambdaExpressions.ParameterIndex = clone.QueryBuilder.LambdaExpressions.ParameterIndex;
             var parameters = (expression as LambdaExpression).Parameters;
@@ -644,6 +671,11 @@ namespace SqlSugar
         #endregion
 
         #region Other
+        public new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9,T10,T11> Distinct()
+        {
+            QueryBuilder.IsDistinct = true;
+            return this;
+        }
         public new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11> Take(int num)
         {
             QueryBuilder.Take = num;
@@ -962,7 +994,9 @@ namespace SqlSugar
             {
                 sql = " ";
             }
+            UtilMethods.UpdateQueryBuilderByClone(this.QueryBuilder, clone);
             this.QueryBuilder.Parameters = clone.QueryBuilder.Parameters;
+            this.QueryBuilder.SelectNewIgnoreColumns = clone.QueryBuilder.SelectNewIgnoreColumns;
             this.QueryBuilder.SubToListParameters = clone.QueryBuilder.SubToListParameters;
             this.QueryBuilder.LambdaExpressions.ParameterIndex = clone.QueryBuilder.LambdaExpressions.ParameterIndex;
             var parameters = (expression as LambdaExpression).Parameters;
@@ -1020,7 +1054,7 @@ namespace SqlSugar
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, TResult>> expression)
         {
             return _Select<TResult>(expression);
-        }
+        } 
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, TResult>> expression)
         {
             return _Select<TResult>(expression);
@@ -1028,6 +1062,13 @@ namespace SqlSugar
         public ISugarQueryable<TResult> Select<TResult>(Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, TResult>> expression)
         {
             return _Select<TResult>(expression);
+        } 
+        public virtual ISugarQueryable<TResult> SelectIF<TResult>(bool condition, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12, TResult>> trueSelectExpression, Expression<Func<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12, TResult>> falseSelectExpression)
+        {
+            if (condition)
+                return Select(trueSelectExpression);
+            else
+                return Select(falseSelectExpression);
         }
         #endregion
 
@@ -1290,6 +1331,11 @@ namespace SqlSugar
         #endregion
 
         #region Other
+        public new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,T12> Distinct()
+        {
+            QueryBuilder.IsDistinct = true;
+            return this;
+        }
         public new ISugarQueryable<T, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12> Take(int num)
         {
             QueryBuilder.Take = num;
